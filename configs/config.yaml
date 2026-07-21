@@ -1,0 +1,65 @@
+platform:
+  mandatoryPolicies:
+    - platform/secrets@1
+
+tenants:
+  demo:
+    mandatoryPolicies:
+      - tenant/demo/pii@1
+
+policies:
+  - metadata:
+      id: platform/secrets
+      version: 1
+    spec:
+      stages: [pre_model, post_tool, ingestion]
+      action: redact
+      timeout: 25ms
+      detectors:
+        - id: builtin/private-key-header@1
+          regex:
+            pattern: '-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----'
+            category: secret.private_key
+            replacement: '<PRIVATE_KEY>'
+            severity: critical
+        - id: builtin/bearer-token@1
+          regex:
+            pattern: '(?i)bearer[ ]+[a-z0-9._~+/=-]{12,}'
+            category: secret.bearer_token
+            replacement: '<BEARER_TOKEN>'
+            severity: high
+
+  - metadata:
+      id: tenant/demo/pii
+      version: 1
+    spec:
+      stages: [pre_model, post_model]
+      action: redact
+      detectors:
+        - id: builtin/email-regex@1
+          regex:
+            pattern: '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+            category: pii.email
+            replacement: '<EMAIL_ADDRESS>'
+            severity: medium
+
+  - metadata:
+      id: platform/injection-keywords
+      version: 1
+    spec:
+      stages: [pre_model, post_retrieval]
+      action: block
+      detectors:
+        - id: builtin/injection-keywords@1
+          keywords:
+            values: ["ignore previous instructions", "reveal the system prompt"]
+            category: prompt_injection.indicator
+            severity: high
+
+profiles:
+  - metadata:
+      id: baseline
+      version: 1
+    spec:
+      policies:
+        - platform/injection-keywords@1

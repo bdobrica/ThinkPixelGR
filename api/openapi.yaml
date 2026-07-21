@@ -1,0 +1,123 @@
+openapi: 3.1.0
+info:
+  title: ThinkPixelGR API
+  version: 0.1.0
+  description: Policy-driven evaluation for LLM-adjacent content.
+servers:
+  - url: http://localhost:8080
+paths:
+  /health/live:
+    get:
+      operationId: live
+      responses:
+        "200": { $ref: "#/components/responses/Health" }
+  /health/ready:
+    get:
+      operationId: ready
+      responses:
+        "200": { $ref: "#/components/responses/Health" }
+  /v1/policies:
+    get:
+      operationId: listPolicies
+      responses:
+        "200":
+          description: Loaded canonical policy identifiers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [policies]
+                properties:
+                  policies: { type: array, items: { type: string } }
+  /v1/evaluations:
+    post:
+      operationId: evaluate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvaluationRequest" }
+      responses:
+        "200":
+          description: A policy decision. Blocks are successful evaluations.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvaluationResponse" }
+        "400":
+          description: Invalid request or unknown policy/profile.
+components:
+  responses:
+    Health:
+      description: Healthy.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties: { status: { type: string, const: ok } }
+  schemas:
+    EvaluationRequest:
+      type: object
+      required: [request_id, stage, content]
+      properties:
+        request_id: { type: string, minLength: 1 }
+        stage:
+          type: string
+          enum: [pre_request, pre_model, post_model, pre_tool, post_tool, pre_retrieval, post_retrieval, ingestion]
+        tenant_id: { type: string }
+        guardrails:
+          type: object
+          properties:
+            profile: { type: string }
+            policies: { type: array, items: { type: string } }
+        content: { $ref: "#/components/schemas/Content" }
+        subject: { type: object, additionalProperties: true }
+        target: { type: object, additionalProperties: true }
+        metadata: { type: object, additionalProperties: true }
+    Content:
+      type: object
+      properties:
+        type: { type: string }
+        text: { type: string }
+        messages:
+          type: array
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role: { type: string }
+              content: { type: string }
+        data: { type: object, additionalProperties: true }
+    EvaluationResponse:
+      type: object
+      required: [evaluation_id, request_id, decision, applied_policies, findings, timing]
+      properties:
+        evaluation_id: { type: string }
+        request_id: { type: string }
+        decision:
+          type: object
+          required: [action, reason]
+          properties:
+            action: { type: string, enum: [allow, block, redact, monitor] }
+            reason: { type: string }
+            transformed_content: { $ref: "#/components/schemas/Content" }
+        applied_policies: { type: array, items: { type: string } }
+        findings:
+          type: array
+          items:
+            type: object
+            required: [detector, category, confidence]
+            properties:
+              detector: { type: string }
+              category: { type: string }
+              confidence: { type: number, minimum: 0, maximum: 1 }
+              severity: { type: string }
+              locations:
+                type: array
+                items:
+                  type: object
+                  required: [path, start, end]
+                  properties:
+                    path: { type: string }
+                    start: { type: integer, minimum: 0 }
+                    end: { type: integer, minimum: 0 }
+        timing: { type: object, additionalProperties: true }

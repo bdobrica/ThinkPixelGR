@@ -1,0 +1,12 @@
+services:
+  thinkpixelgr:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./configs/config.yaml:/configs/config.yaml:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
