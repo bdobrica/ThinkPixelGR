@@ -722,6 +722,4 @@ Planned contribution areas include:
 
 ## License
 
-A license has not yet been selected.
-
-Before accepting external contributions or publishing production releases, add a `LICENSE` file and update this section with the chosen license.
+ThinkPixelGR is licensed under the [Apache License 2.0](./LICENSE).
