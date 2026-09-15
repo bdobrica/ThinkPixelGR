@@ -69,7 +69,7 @@ func (h *handler) evaluate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "UNKNOWN_POLICY", err.Error())
 		return
 	}
-	slog.Info("evaluation completed", "evaluation_id", result.EvaluationID, "request_id", result.RequestID, "action", result.Decision.Action, "findings", len(result.Findings), "duration_ms", result.Timing.TotalMS)
+	slog.Info("evaluation completed", "evaluation_id", result.EvaluationID, "request_id", result.RequestID, "action", result.Decision.Action, "findings", len(result.Findings), "detector_failures", len(result.DetectorFailures), "duration_ms", result.Timing.TotalMS)
 	writeJSON(w, http.StatusOK, result)
 }
 

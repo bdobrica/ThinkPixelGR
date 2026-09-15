@@ -22,7 +22,7 @@ material belong under [`docs/`](docs/README.md).
   JSON Schema validation, and structured secret detection.
 - [x] Define and test the remote detector wire contract before adding Python
   detector adapters.
-- [ ] Enforce per-policy and per-detector deadlines and document fail-open,
+- [x] Enforce per-policy and per-detector deadlines and document fail-open,
   fail-closed, and monitor-on-failure behavior in the public contract.
 - [ ] Add authentication and tenant authorization without treating a guardrail
   decision as Run or tool authority.

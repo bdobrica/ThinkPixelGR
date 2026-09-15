@@ -19,9 +19,51 @@ import (
 	"github.com/thinkpixelgr/thinkpixelgr/internal/policy"
 )
 
-type Evaluator struct{ resolver *policy.Resolver }
+type detectorResult struct {
+	findings     []domain.Finding
+	replacements []replacement
+}
 
-func New(resolver *policy.Resolver) *Evaluator { return &Evaluator{resolver: resolver} }
+type detectorExecutor interface {
+	Evaluate(context.Context, policy.CompiledDetector, domain.EvaluationRequest) (detectorResult, error)
+}
+
+type builtinExecutor struct{}
+
+func (builtinExecutor) Evaluate(ctx context.Context, detector policy.CompiledDetector, req domain.EvaluationRequest) (detectorResult, error) {
+	if err := ctx.Err(); err != nil {
+		return detectorResult{}, err
+	}
+	findings, replacements := evaluateDetector(detector, req)
+	if err := ctx.Err(); err != nil {
+		return detectorResult{}, err
+	}
+	return detectorResult{findings: findings, replacements: replacements}, nil
+}
+
+type DetectorError struct {
+	Code      domain.FailureCode
+	Retryable bool
+	Err       error
+}
+
+func (e *DetectorError) Error() string {
+	if e.Err == nil {
+		return string(e.Code)
+	}
+	return e.Err.Error()
+}
+
+func (e *DetectorError) Unwrap() error { return e.Err }
+
+type Evaluator struct {
+	resolver *policy.Resolver
+	executor detectorExecutor
+}
+
+func New(resolver *policy.Resolver) *Evaluator {
+	return &Evaluator{resolver: resolver, executor: builtinExecutor{}}
+}
 
 type replacement struct {
 	path, value string
@@ -30,6 +72,9 @@ type replacement struct {
 
 func (e *Evaluator) Evaluate(ctx context.Context, req domain.EvaluationRequest) (domain.EvaluationResponse, error) {
 	started := time.Now()
+	if err := ctx.Err(); err != nil {
+		return domain.EvaluationResponse{}, err
+	}
 	policies, err := e.resolver.Resolve(req.TenantID, req.Guardrails.Profile, req.Guardrails.Policies, req.Stage)
 	if err != nil {
 		return domain.EvaluationResponse{}, err
@@ -38,36 +83,74 @@ func (e *Evaluator) Evaluate(ctx context.Context, req domain.EvaluationRequest) 
 	response := domain.EvaluationResponse{
 		EvaluationID: newID(), RequestID: req.RequestID,
 		Decision: domain.Decision{Action: domain.ActionAllow, Reason: "no policy findings"},
-		Findings: []domain.Finding{}, Timing: domain.Timing{Detectors: map[string]int64{}},
+		Findings: []domain.Finding{}, Timing: domain.Timing{Detectors: map[string]int64{}, Policies: map[string]int64{}},
 	}
 	var replacements []replacement
-	winningPolicy := ""
+	winningReason := ""
 	for _, p := range policies {
-		response.AppliedPolicies = append(response.AppliedPolicies, p.Config.CanonicalID())
+		if err := ctx.Err(); err != nil {
+			return domain.EvaluationResponse{}, err
+		}
+		policyID := p.Config.CanonicalID()
+		response.AppliedPolicies = append(response.AppliedPolicies, policyID)
+		policyStart := time.Now()
+		policyCtx, cancelPolicy := context.WithTimeout(ctx, p.Config.Spec.Timeout)
 		for _, detector := range p.Detectors {
-			select {
-			case <-ctx.Done():
-				return domain.EvaluationResponse{}, ctx.Err()
-			default:
+			if err := ctx.Err(); err != nil {
+				cancelPolicy()
+				return domain.EvaluationResponse{}, err
 			}
+			if err := policyCtx.Err(); err != nil {
+				failure := newFailure(policyID, "", domain.FailureScopePolicy, domain.FailurePolicyTimeout, p.Config.Spec.FailureMode, p.Config.Spec.Timeout, true)
+				response.DetectorFailures = append(response.DetectorFailures, failure)
+				applyFailureDecision(&response.Decision, &winningReason, failure)
+				break
+			}
+
+			scope, timeout := effectiveDetectorTimeout(policyCtx, detector.Config.Timeout)
+			detectorCtx, cancelDetector := context.WithTimeout(policyCtx, timeout)
 			detectorStart := time.Now()
-			findings, foundReplacements := evaluateDetector(detector, req)
+			result, detectorErr := e.executor.Evaluate(detectorCtx, detector, req)
 			response.Timing.Detectors[detector.Config.ID] += time.Since(detectorStart).Milliseconds()
-			response.Findings = append(response.Findings, findings...)
-			if len(findings) == 0 {
+			if detectorErr == nil && detectorCtx.Err() != nil {
+				detectorErr = detectorCtx.Err()
+			}
+			cancelDetector()
+			if detectorErr != nil {
+				if err := ctx.Err(); err != nil {
+					cancelPolicy()
+					return domain.EvaluationResponse{}, err
+				}
+				evidenceTimeout := timeout
+				if scope == domain.FailureScopePolicy && errors.Is(detectorErr, context.DeadlineExceeded) {
+					evidenceTimeout = p.Config.Spec.Timeout
+				}
+				failure := detectorFailure(policyID, detector.Config.ID, scope, p.Config.Spec.FailureMode, evidenceTimeout, detectorErr)
+				response.DetectorFailures = append(response.DetectorFailures, failure)
+				applyFailureDecision(&response.Decision, &winningReason, failure)
+				if failure.Scope == domain.FailureScopePolicy {
+					break
+				}
+				continue
+			}
+
+			response.Findings = append(response.Findings, result.findings...)
+			if len(result.findings) == 0 {
 				continue
 			}
 			if actionPriority(p.Config.Spec.Action) > actionPriority(response.Decision.Action) {
 				response.Decision.Action = p.Config.Spec.Action
-				winningPolicy = p.Config.CanonicalID()
+				winningReason = fmt.Sprintf("matched policy %s", policyID)
 			}
 			if p.Config.Spec.Action == domain.ActionRedact {
-				replacements = append(replacements, foundReplacements...)
+				replacements = append(replacements, result.replacements...)
 			}
 		}
+		cancelPolicy()
+		response.Timing.Policies[policyID] += time.Since(policyStart).Milliseconds()
 	}
-	if winningPolicy != "" {
-		response.Decision.Reason = fmt.Sprintf("matched policy %s", winningPolicy)
+	if winningReason != "" {
+		response.Decision.Reason = winningReason
 	}
 	if response.Decision.Action == domain.ActionRedact && len(replacements) > 0 {
 		transformed := applyReplacements(req.Content, replacements)
@@ -75,6 +158,81 @@ func (e *Evaluator) Evaluate(ctx context.Context, req domain.EvaluationRequest) 
 	}
 	response.Timing.TotalMS = time.Since(started).Milliseconds()
 	return response, nil
+}
+
+func effectiveDetectorTimeout(policyCtx context.Context, configured time.Duration) (domain.FailureScope, time.Duration) {
+	deadline, ok := policyCtx.Deadline()
+	if !ok {
+		return domain.FailureScopeDetector, configured
+	}
+	remaining := time.Until(deadline)
+	if configured < remaining {
+		return domain.FailureScopeDetector, configured
+	}
+	return domain.FailureScopePolicy, remaining
+}
+
+func detectorFailure(policyID, detectorID string, scope domain.FailureScope, mode domain.FailureMode, timeout time.Duration, err error) domain.DetectorFailure {
+	code := domain.FailureDetectorInternal
+	retryable := false
+	if errors.Is(err, context.DeadlineExceeded) {
+		code = domain.FailureDetectorTimeout
+		retryable = true
+		if scope == domain.FailureScopePolicy {
+			code = domain.FailurePolicyTimeout
+		}
+	} else {
+		scope = domain.FailureScopeDetector
+		var detectorErr *DetectorError
+		if errors.As(err, &detectorErr) {
+			if validExecutorFailureCode(detectorErr.Code) {
+				code = detectorErr.Code
+			}
+			retryable = detectorErr.Retryable
+		}
+	}
+	return newFailure(policyID, detectorID, scope, code, mode, timeout, retryable)
+}
+
+func validExecutorFailureCode(code domain.FailureCode) bool {
+	switch code {
+	case domain.FailureDetectorUnavailable, domain.FailureDetectorInvalidResponse,
+		domain.FailureDetectorUnsupported, domain.FailureDetectorInternal:
+		return true
+	default:
+		return false
+	}
+}
+
+func newFailure(policyID, detectorID string, scope domain.FailureScope, code domain.FailureCode, mode domain.FailureMode, timeout time.Duration, retryable bool) domain.DetectorFailure {
+	return domain.DetectorFailure{
+		PolicyID: policyID, DetectorID: detectorID, Scope: scope, Code: code,
+		FailureMode: mode, TimeoutMS: durationMilliseconds(timeout), Retryable: retryable,
+	}
+}
+
+func applyFailureDecision(decision *domain.Decision, winningReason *string, failure domain.DetectorFailure) {
+	action := domain.ActionAllow
+	switch failure.FailureMode {
+	case domain.FailureClosed:
+		action = domain.ActionBlock
+	case domain.FailureMonitor:
+		action = domain.ActionMonitor
+	}
+	if actionPriority(action) > actionPriority(decision.Action) {
+		decision.Action = action
+		*winningReason = fmt.Sprintf("%s in policy %s handled with failure mode %s", failure.Code, failure.PolicyID, failure.FailureMode)
+	} else if action == domain.ActionAllow && decision.Action == domain.ActionAllow && *winningReason == "" {
+		*winningReason = fmt.Sprintf("%s in policy %s handled with failure mode %s", failure.Code, failure.PolicyID, failure.FailureMode)
+	}
+}
+
+func durationMilliseconds(duration time.Duration) int64 {
+	milliseconds := duration.Milliseconds()
+	if milliseconds == 0 && duration > 0 {
+		return 1
+	}
+	return milliseconds
 }
 
 func evaluateDetector(detector policy.CompiledDetector, req domain.EvaluationRequest) ([]domain.Finding, []replacement) {

@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/config"
@@ -41,6 +42,18 @@ func NewResolver(cfg *config.Config) (*Resolver, error) {
 		if p.Spec.Action != domain.ActionAllow && p.Spec.Action != domain.ActionBlock && p.Spec.Action != domain.ActionRedact && p.Spec.Action != domain.ActionMonitor {
 			return nil, fmt.Errorf("policy %q has invalid action %q", p.CanonicalID(), p.Spec.Action)
 		}
+		if p.Spec.Timeout == 0 {
+			p.Spec.Timeout = 100 * time.Millisecond
+		}
+		if p.Spec.Timeout < 0 {
+			return nil, fmt.Errorf("policy %q timeout must be positive", p.CanonicalID())
+		}
+		if p.Spec.FailureMode == "" {
+			p.Spec.FailureMode = domain.FailureClosed
+		}
+		if !p.Spec.FailureMode.Valid() {
+			return nil, fmt.Errorf("policy %q has invalid failure mode %q", p.CanonicalID(), p.Spec.FailureMode)
+		}
 		compiled := CompiledPolicy{Config: p}
 		for _, detector := range p.Spec.Detectors {
 			if detector.ID == "" {
@@ -52,6 +65,15 @@ func NewResolver(cfg *config.Config) (*Resolver, error) {
 			}
 			if p.Spec.Action == domain.ActionRedact && (detector.RequestLimits != nil || detector.AllowDeny != nil || detector.JSONSchema != nil) {
 				return nil, fmt.Errorf("detector %q in %q cannot produce a redaction", detector.ID, p.CanonicalID())
+			}
+			if detector.Timeout == 0 {
+				detector.Timeout = p.Spec.Timeout
+			}
+			if detector.Timeout < 0 {
+				return nil, fmt.Errorf("detector %q in %q timeout must be positive", detector.ID, p.CanonicalID())
+			}
+			if detector.Timeout > p.Spec.Timeout {
+				return nil, fmt.Errorf("detector %q in %q timeout cannot exceed the policy timeout", detector.ID, p.CanonicalID())
 			}
 			cd := CompiledDetector{Config: detector}
 			switch {

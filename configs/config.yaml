@@ -15,8 +15,11 @@ policies:
     spec:
       stages: [pre_request, pre_model, post_model, pre_tool, post_tool, pre_retrieval, post_retrieval, ingestion]
       action: block
+      failureMode: closed
+      timeout: 25ms
       detectors:
         - id: builtin/request-limits@1
+          timeout: 10ms
           requestLimits:
             maxRequestBytes: 900000
             maxMessages: 256
@@ -31,9 +34,11 @@ policies:
     spec:
       stages: [pre_model, post_tool, ingestion]
       action: redact
+      failureMode: closed
       timeout: 25ms
       detectors:
         - id: builtin/structured-secrets@1
+          timeout: 10ms
           secrets:
             replacement: '<SECRET>'
             severity: critical
@@ -44,8 +49,11 @@ policies:
     spec:
       stages: [pre_model, post_model]
       action: redact
+      failureMode: closed
+      timeout: 25ms
       detectors:
         - id: builtin/email-regex@1
+          timeout: 10ms
           regex:
             pattern: '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
             category: pii.email
@@ -58,8 +66,11 @@ policies:
     spec:
       stages: [pre_model, post_retrieval]
       action: block
+      failureMode: closed
+      timeout: 25ms
       detectors:
         - id: builtin/injection-keywords@1
+          timeout: 10ms
           keywords:
             values: ["ignore previous instructions", "reveal the system prompt"]
             category: prompt_injection.indicator
@@ -71,8 +82,11 @@ policies:
     spec:
       stages: [pre_request, pre_model]
       action: block
+      failureMode: closed
+      timeout: 25ms
       detectors:
         - id: builtin/model-list@1
+          timeout: 10ms
           allowDeny:
             selector: target.model
             deny: [unapproved-model]
@@ -84,8 +98,11 @@ policies:
     spec:
       stages: [pre_tool]
       action: block
+      failureMode: closed
+      timeout: 25ms
       detectors:
         - id: builtin/tool-arguments-schema@1
+          timeout: 10ms
           jsonSchema:
             target: content.data
             category: schema.tool_arguments

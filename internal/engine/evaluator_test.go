@@ -2,10 +2,12 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/thinkpixelgr/thinkpixelgr/internal/config"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/domain"
@@ -135,6 +137,146 @@ func TestEntropySecretRequiresContext(t *testing.T) {
 	if len(result.Findings) != 0 {
 		t.Fatalf("findings = %#v", result.Findings)
 	}
+}
+
+func TestDetectorTimeoutFailureModes(t *testing.T) {
+	tests := []struct {
+		mode   domain.FailureMode
+		action domain.Action
+	}{
+		{domain.FailureOpen, domain.ActionAllow},
+		{domain.FailureClosed, domain.ActionBlock},
+		{domain.FailureMonitor, domain.ActionMonitor},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.mode), func(t *testing.T) {
+			resolver := deadlineResolver(t, 100*time.Millisecond, 5*time.Millisecond, tt.mode, []config.Detector{{ID: "slow", Keywords: &config.Keywords{Values: []string{"x"}}}})
+			evaluator := &Evaluator{resolver: resolver, executor: executorFunc(func(ctx context.Context, _ policy.CompiledDetector, _ domain.EvaluationRequest) (detectorResult, error) {
+				<-ctx.Done()
+				return detectorResult{}, ctx.Err()
+			})}
+			result, err := evaluator.Evaluate(context.Background(), domain.EvaluationRequest{RequestID: "req", Stage: domain.StagePreModel})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Decision.Action != tt.action {
+				t.Fatalf("action = %q, want %q", result.Decision.Action, tt.action)
+			}
+			if len(result.DetectorFailures) != 1 {
+				t.Fatalf("failures = %#v", result.DetectorFailures)
+			}
+			failure := result.DetectorFailures[0]
+			if failure.Code != domain.FailureDetectorTimeout || failure.Scope != domain.FailureScopeDetector || failure.FailureMode != tt.mode || failure.TimeoutMS != 5 || !failure.Retryable {
+				t.Fatalf("failure = %#v", failure)
+			}
+		})
+	}
+}
+
+func TestPolicyTimeoutStopsRemainingDetectors(t *testing.T) {
+	detectors := []config.Detector{
+		{ID: "slow", Timeout: 5 * time.Millisecond, Keywords: &config.Keywords{Values: []string{"x"}}},
+		{ID: "must-not-run", Timeout: 5 * time.Millisecond, Keywords: &config.Keywords{Values: []string{"x"}}},
+	}
+	resolver := deadlineResolver(t, 5*time.Millisecond, 0, domain.FailureClosed, detectors)
+	calls := 0
+	evaluator := &Evaluator{resolver: resolver, executor: executorFunc(func(ctx context.Context, _ policy.CompiledDetector, _ domain.EvaluationRequest) (detectorResult, error) {
+		calls++
+		<-ctx.Done()
+		return detectorResult{}, ctx.Err()
+	})}
+	result, err := evaluator.Evaluate(context.Background(), domain.EvaluationRequest{RequestID: "req", Stage: domain.StagePreModel})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("executor calls = %d, want 1", calls)
+	}
+	if result.Decision.Action != domain.ActionBlock || len(result.DetectorFailures) != 1 {
+		t.Fatalf("result = %#v", result)
+	}
+	failure := result.DetectorFailures[0]
+	if failure.Code != domain.FailurePolicyTimeout || failure.Scope != domain.FailureScopePolicy || failure.TimeoutMS != 5 {
+		t.Fatalf("failure = %#v", failure)
+	}
+}
+
+func TestDetectorFailureContinuesWithinPolicyBudget(t *testing.T) {
+	detectors := []config.Detector{
+		{ID: "unavailable", Keywords: &config.Keywords{Values: []string{"x"}}},
+		{ID: "finding", Keywords: &config.Keywords{Values: []string{"x"}}},
+	}
+	resolver := deadlineResolver(t, 100*time.Millisecond, 20*time.Millisecond, domain.FailureOpen, detectors)
+	calls := 0
+	evaluator := &Evaluator{resolver: resolver, executor: executorFunc(func(_ context.Context, detector policy.CompiledDetector, _ domain.EvaluationRequest) (detectorResult, error) {
+		calls++
+		if detector.Config.ID == "unavailable" {
+			return detectorResult{}, &DetectorError{Code: domain.FailureDetectorUnavailable, Retryable: true}
+		}
+		return detectorResult{findings: []domain.Finding{{DetectorID: detector.Config.ID, Category: "test", Confidence: 1}}}, nil
+	})}
+	result, err := evaluator.Evaluate(context.Background(), domain.EvaluationRequest{RequestID: "req", Stage: domain.StagePreModel})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 || len(result.DetectorFailures) != 1 || len(result.Findings) != 1 || result.Decision.Action != domain.ActionBlock {
+		t.Fatalf("calls=%d result=%#v", calls, result)
+	}
+}
+
+func TestTypedDetectorFailureIsReportedWithoutRawError(t *testing.T) {
+	resolver := deadlineResolver(t, 100*time.Millisecond, 20*time.Millisecond, domain.FailureOpen, []config.Detector{{ID: "remote", Keywords: &config.Keywords{Values: []string{"x"}}}})
+	evaluator := &Evaluator{resolver: resolver, executor: executorFunc(func(context.Context, policy.CompiledDetector, domain.EvaluationRequest) (detectorResult, error) {
+		return detectorResult{}, &DetectorError{Code: domain.FailureDetectorUnavailable, Retryable: true, Err: errors.New("upstream included sensitive diagnostics")}
+	})}
+	result, err := evaluator.Evaluate(context.Background(), domain.EvaluationRequest{RequestID: "req", Stage: domain.StagePreModel})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded := fmt.Sprint(result.DetectorFailures)
+	if strings.Contains(encoded, "sensitive diagnostics") {
+		t.Fatalf("failure leaked raw error: %s", encoded)
+	}
+	if len(result.DetectorFailures) != 1 || result.DetectorFailures[0].Code != domain.FailureDetectorUnavailable || !result.DetectorFailures[0].Retryable {
+		t.Fatalf("failures = %#v", result.DetectorFailures)
+	}
+}
+
+func TestCallerCancellationAbortsEvaluation(t *testing.T) {
+	resolver := deadlineResolver(t, 100*time.Millisecond, 20*time.Millisecond, domain.FailureClosed, []config.Detector{{ID: "detector", Keywords: &config.Keywords{Values: []string{"x"}}}})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := (&Evaluator{resolver: resolver, executor: builtinExecutor{}}).Evaluate(ctx, domain.EvaluationRequest{RequestID: "req", Stage: domain.StagePreModel})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+type executorFunc func(context.Context, policy.CompiledDetector, domain.EvaluationRequest) (detectorResult, error)
+
+func (fn executorFunc) Evaluate(ctx context.Context, detector policy.CompiledDetector, req domain.EvaluationRequest) (detectorResult, error) {
+	return fn(ctx, detector, req)
+}
+
+func deadlineResolver(t *testing.T, policyTimeout, detectorTimeout time.Duration, mode domain.FailureMode, detectors []config.Detector) *policy.Resolver {
+	t.Helper()
+	for i := range detectors {
+		if detectors[i].Timeout == 0 {
+			detectors[i].Timeout = detectorTimeout
+		}
+	}
+	const policyID = "test/deadline@1"
+	resolver, err := policy.NewResolver(&config.Config{
+		Platform: config.PlatformConfig{MandatoryPolicies: []string{policyID}},
+		Policies: []config.Policy{{Metadata: config.Metadata{ID: "test/deadline", Version: 1}, Spec: config.PolicySpec{
+			Stages: []domain.Stage{domain.StagePreModel}, Action: domain.ActionBlock, FailureMode: mode,
+			Timeout: policyTimeout, Detectors: detectors,
+		}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resolver
 }
 
 func evaluateSingle(t *testing.T, detector config.Detector, req domain.EvaluationRequest) domain.EvaluationResponse {

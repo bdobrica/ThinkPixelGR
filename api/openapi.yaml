@@ -45,6 +45,8 @@ paths:
               schema: { $ref: "#/components/schemas/EvaluationResponse" }
         "400":
           description: Invalid request or unknown policy/profile.
+        "504":
+          description: The caller or overall evaluation context expired; no policy failure mode was applied.
 components:
   responses:
     Health:
@@ -124,4 +126,31 @@ components:
                     path: { type: string }
                     start: { type: integer, minimum: 0 }
                     end: { type: integer, minimum: 0 }
-        timing: { type: object, additionalProperties: true }
+        detector_failures:
+          type: array
+          description: Content-free evidence for detector or policy execution failures.
+          items:
+            type: object
+            required: [policy, scope, code, failure_mode, timeout_ms, retryable]
+            properties:
+              policy: { type: string, minLength: 1 }
+              detector: { type: string, minLength: 1 }
+              scope: { type: string, enum: [policy, detector] }
+              code:
+                type: string
+                enum: [POLICY_TIMEOUT, DETECTOR_TIMEOUT, DETECTOR_UNAVAILABLE, DETECTOR_INVALID_RESPONSE, DETECTOR_UNSUPPORTED_INPUT, DETECTOR_INTERNAL_ERROR]
+              failure_mode: { type: string, enum: [open, closed, monitor] }
+              timeout_ms: { type: integer, minimum: 1 }
+              retryable: { type: boolean }
+            additionalProperties: false
+        timing:
+          type: object
+          required: [total_ms, detectors]
+          properties:
+            total_ms: { type: integer, minimum: 0 }
+            detectors:
+              type: object
+              additionalProperties: { type: integer, minimum: 0 }
+            policies:
+              type: object
+              additionalProperties: { type: integer, minimum: 0 }

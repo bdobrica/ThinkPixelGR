@@ -37,11 +37,12 @@ type Policy struct {
 func (p Policy) CanonicalID() string { return fmt.Sprintf("%s@%d", p.Metadata.ID, p.Metadata.Version) }
 
 type PolicySpec struct {
-	Stages     []domain.Stage `yaml:"stages"`
-	Action     domain.Action  `yaml:"action"`
-	Timeout    time.Duration  `yaml:"-"`
-	TimeoutRaw string         `yaml:"timeout"`
-	Detectors  []Detector     `yaml:"detectors"`
+	Stages      []domain.Stage     `yaml:"stages"`
+	Action      domain.Action      `yaml:"action"`
+	FailureMode domain.FailureMode `yaml:"failureMode,omitempty"`
+	Timeout     time.Duration      `yaml:"-"`
+	TimeoutRaw  string             `yaml:"timeout"`
+	Detectors   []Detector         `yaml:"detectors"`
 }
 
 type Detector struct {
@@ -52,6 +53,8 @@ type Detector struct {
 	AllowDeny     *AllowDeny     `yaml:"allowDeny,omitempty"`
 	JSONSchema    *JSONSchema    `yaml:"jsonSchema,omitempty"`
 	Secrets       *Secrets       `yaml:"secrets,omitempty"`
+	Timeout       time.Duration  `yaml:"-"`
+	TimeoutRaw    string         `yaml:"timeout,omitempty"`
 }
 
 type Regex struct {
@@ -130,13 +133,30 @@ func Load(path string) (*Config, error) {
 		rawTimeout := cfg.Policies[i].Spec.TimeoutRaw
 		if rawTimeout == "" {
 			cfg.Policies[i].Spec.Timeout = 100 * time.Millisecond
-			continue
+		} else {
+			d, err := time.ParseDuration(rawTimeout)
+			if err != nil {
+				return nil, fmt.Errorf("policy %q timeout: %w", cfg.Policies[i].CanonicalID(), err)
+			}
+			if d <= 0 {
+				return nil, fmt.Errorf("policy %q timeout must be positive", cfg.Policies[i].CanonicalID())
+			}
+			cfg.Policies[i].Spec.Timeout = d
 		}
-		d, err := time.ParseDuration(rawTimeout)
-		if err != nil {
-			return nil, fmt.Errorf("policy %q timeout: %w", cfg.Policies[i].CanonicalID(), err)
+		for j := range cfg.Policies[i].Spec.Detectors {
+			rawDetectorTimeout := cfg.Policies[i].Spec.Detectors[j].TimeoutRaw
+			if rawDetectorTimeout == "" {
+				continue
+			}
+			detectorTimeout, err := time.ParseDuration(rawDetectorTimeout)
+			if err != nil {
+				return nil, fmt.Errorf("detector %q timeout: %w", cfg.Policies[i].Spec.Detectors[j].ID, err)
+			}
+			if detectorTimeout <= 0 {
+				return nil, fmt.Errorf("detector %q timeout must be positive", cfg.Policies[i].Spec.Detectors[j].ID)
+			}
+			cfg.Policies[i].Spec.Detectors[j].Timeout = detectorTimeout
 		}
-		cfg.Policies[i].Spec.Timeout = d
 	}
 	return &cfg, nil
 }

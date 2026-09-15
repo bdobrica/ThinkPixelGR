@@ -32,6 +32,18 @@ const (
 	ActionMonitor Action = "monitor"
 )
 
+type FailureMode string
+
+const (
+	FailureOpen    FailureMode = "open"
+	FailureClosed  FailureMode = "closed"
+	FailureMonitor FailureMode = "monitor"
+)
+
+func (m FailureMode) Valid() bool {
+	return m == FailureOpen || m == FailureClosed || m == FailureMonitor
+}
+
 type EvaluationRequest struct {
 	RequestID    string            `json:"request_id"`
 	Stage        Stage             `json:"stage"`
@@ -85,13 +97,53 @@ type Decision struct {
 type Timing struct {
 	TotalMS   int64            `json:"total_ms"`
 	Detectors map[string]int64 `json:"detectors"`
+	Policies  map[string]int64 `json:"policies"`
+}
+
+type FailureScope string
+
+const (
+	FailureScopePolicy   FailureScope = "policy"
+	FailureScopeDetector FailureScope = "detector"
+)
+
+type FailureCode string
+
+const (
+	FailurePolicyTimeout           FailureCode = "POLICY_TIMEOUT"
+	FailureDetectorTimeout         FailureCode = "DETECTOR_TIMEOUT"
+	FailureDetectorUnavailable     FailureCode = "DETECTOR_UNAVAILABLE"
+	FailureDetectorInvalidResponse FailureCode = "DETECTOR_INVALID_RESPONSE"
+	FailureDetectorUnsupported     FailureCode = "DETECTOR_UNSUPPORTED_INPUT"
+	FailureDetectorInternal        FailureCode = "DETECTOR_INTERNAL_ERROR"
+)
+
+func (c FailureCode) Valid() bool {
+	switch c {
+	case FailurePolicyTimeout, FailureDetectorTimeout, FailureDetectorUnavailable,
+		FailureDetectorInvalidResponse, FailureDetectorUnsupported, FailureDetectorInternal:
+		return true
+	default:
+		return false
+	}
+}
+
+type DetectorFailure struct {
+	PolicyID    string       `json:"policy"`
+	DetectorID  string       `json:"detector,omitempty"`
+	Scope       FailureScope `json:"scope"`
+	Code        FailureCode  `json:"code"`
+	FailureMode FailureMode  `json:"failure_mode"`
+	TimeoutMS   int64        `json:"timeout_ms,omitempty"`
+	Retryable   bool         `json:"retryable"`
 }
 
 type EvaluationResponse struct {
-	EvaluationID    string    `json:"evaluation_id"`
-	RequestID       string    `json:"request_id"`
-	Decision        Decision  `json:"decision"`
-	AppliedPolicies []string  `json:"applied_policies"`
-	Findings        []Finding `json:"findings"`
-	Timing          Timing    `json:"timing"`
+	EvaluationID     string            `json:"evaluation_id"`
+	RequestID        string            `json:"request_id"`
+	Decision         Decision          `json:"decision"`
+	AppliedPolicies  []string          `json:"applied_policies"`
+	Findings         []Finding         `json:"findings"`
+	DetectorFailures []DetectorFailure `json:"detector_failures,omitempty"`
+	Timing           Timing            `json:"timing"`
 }

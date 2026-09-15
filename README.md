@@ -15,8 +15,9 @@ resolves mandatory and selected policies, and runs the Phase 1 deterministic
 detectors: regex, keywords, request limits, allow/deny lists, JSON Schema, and
 structured secret detection. It supports `allow`, `block`, `redact`, and `monitor`.
 The versioned remote-detector wire contract and conformance tests are published;
-remote adapters, authentication, live configuration reload, observability, and
-production deployment remain planned work.
+policy and detector deadlines now enforce explicit fail-open, fail-closed, or
+monitor-on-failure behavior. Remote adapters, authentication, live configuration
+reload, observability, and production deployment remain planned work.
 
 See the [documentation index](docs/README.md), [implementation ledger](TODO.md),
 and [implementation plan](PLAN.md) for authoritative detail.

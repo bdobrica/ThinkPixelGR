@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -62,6 +63,18 @@ func TestEvaluateValidatesStage(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	testHandler(t).ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/v1/evaluations", body))
 	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestEvaluateReturnsGatewayTimeoutForCallerCancellation(t *testing.T) {
+	body := bytes.NewBufferString(`{"request_id":"r1","stage":"pre_model","content":{"text":"hello"}}`)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	request := httptest.NewRequest(http.MethodPost, "/v1/evaluations", body).WithContext(ctx)
+	recorder := httptest.NewRecorder()
+	testHandler(t).ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusGatewayTimeout {
 		t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
 	}
 }

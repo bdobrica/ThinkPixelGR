@@ -1095,6 +1095,9 @@ Do not launch unmanaged goroutines for audit or observation work. Use bounded qu
 
 ## 24. Failure Modes
 
+The implemented normative semantics and public failure evidence are documented
+in [`docs/contracts/evaluation-api-v1.md`](docs/contracts/evaluation-api-v1.md).
+
 Each policy must define behavior for detector failure.
 
 ```go

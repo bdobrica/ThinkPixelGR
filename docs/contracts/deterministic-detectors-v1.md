@@ -8,6 +8,9 @@ rejected when policies are compiled at startup.
 
 Policies using `requestLimits`, `allowDeny`, or `jsonSchema` cannot select the
 `redact` action because those detectors do not produce textual replacements.
+All detector entries support a common `timeout`. The containing policy supplies
+its total `timeout` and `failureMode`; the normative behavior is documented in
+[Evaluation API v1 compatibility notes](evaluation-api-v1.md#deadlines-and-detector-failures).
 
 The JSON Schema implementation supports drafts 4, 6, 7, 2019-09, and 2020-12.
 Schemas are compiled once at startup using

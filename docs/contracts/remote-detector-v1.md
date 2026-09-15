@@ -84,3 +84,9 @@ evaluation deadline.
 
 Detection has no side effects and is safe to retry at the protocol level, but a
 non-deterministic detector is not required to return byte-identical findings.
+
+The Go adapter MUST bind each remote call to the detector context supplied by
+the evaluator. Remote timeout, unavailable, unsupported-input, and invalid
+response conditions map to the evaluation API's content-free
+`detector_failures` evidence. The policy-selected failure mode remains local to
+ThinkPixelGR and MUST NOT be sent to or decided by the remote detector.

@@ -2,6 +2,7 @@ package policy
 
 import (
 	"testing"
+	"time"
 
 	"github.com/thinkpixelgr/thinkpixelgr/internal/config"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/domain"
@@ -96,5 +97,34 @@ func TestResolverRejectsRedactForNonTransformingDetector(t *testing.T) {
 	}}}}
 	if _, err := NewResolver(cfg); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestResolverDefaultsDeadlinesToFailClosed(t *testing.T) {
+	cfg := &config.Config{Policies: []config.Policy{{Metadata: config.Metadata{ID: "defaults", Version: 1}, Spec: config.PolicySpec{
+		Action: domain.ActionBlock, Detectors: []config.Detector{{ID: "detector", Keywords: &config.Keywords{Values: []string{"x"}}}},
+	}}}}
+	resolver, err := NewResolver(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compiled := resolver.policies["defaults@1"]
+	if compiled.Config.Spec.Timeout != 100*time.Millisecond || compiled.Config.Spec.FailureMode != domain.FailureClosed || compiled.Detectors[0].Config.Timeout != 100*time.Millisecond {
+		t.Fatalf("compiled = %#v", compiled)
+	}
+}
+
+func TestResolverRejectsInvalidDeadlineConfiguration(t *testing.T) {
+	tests := []config.PolicySpec{
+		{Action: domain.ActionBlock, FailureMode: "unexpected", Detectors: []config.Detector{{ID: "d", Keywords: &config.Keywords{Values: []string{"x"}}}}},
+		{Action: domain.ActionBlock, Timeout: -time.Millisecond, Detectors: []config.Detector{{ID: "d", Keywords: &config.Keywords{Values: []string{"x"}}}}},
+		{Action: domain.ActionBlock, Detectors: []config.Detector{{ID: "d", Timeout: -time.Millisecond, Keywords: &config.Keywords{Values: []string{"x"}}}}},
+		{Action: domain.ActionBlock, Timeout: time.Millisecond, Detectors: []config.Detector{{ID: "d", Timeout: 2 * time.Millisecond, Keywords: &config.Keywords{Values: []string{"x"}}}}},
+	}
+	for _, spec := range tests {
+		cfg := &config.Config{Policies: []config.Policy{{Metadata: config.Metadata{ID: "bad-deadline", Version: 1}, Spec: spec}}}
+		if _, err := NewResolver(cfg); err == nil {
+			t.Fatalf("expected error for %#v", spec)
+		}
 	}
 }
