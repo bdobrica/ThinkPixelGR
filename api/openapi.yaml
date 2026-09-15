@@ -111,6 +111,10 @@ components:
               category: { type: string }
               confidence: { type: number, minimum: 0, maximum: 1 }
               severity: { type: string }
+              attributes:
+                type: object
+                description: Detector evidence metadata. It never contains matched secret values.
+                additionalProperties: true
               locations:
                 type: array
                 items:

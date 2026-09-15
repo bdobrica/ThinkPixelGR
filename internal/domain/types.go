@@ -33,14 +33,15 @@ const (
 )
 
 type EvaluationRequest struct {
-	RequestID  string            `json:"request_id"`
-	Stage      Stage             `json:"stage"`
-	TenantID   string            `json:"tenant_id,omitempty"`
-	Subject    map[string]any    `json:"subject,omitempty"`
-	Target     map[string]any    `json:"target,omitempty"`
-	Guardrails GuardrailSelector `json:"guardrails,omitempty"`
-	Content    ContentEnvelope   `json:"content"`
-	Metadata   map[string]any    `json:"metadata,omitempty"`
+	RequestID    string            `json:"request_id"`
+	Stage        Stage             `json:"stage"`
+	TenantID     string            `json:"tenant_id,omitempty"`
+	Subject      map[string]any    `json:"subject,omitempty"`
+	Target       map[string]any    `json:"target,omitempty"`
+	Guardrails   GuardrailSelector `json:"guardrails,omitempty"`
+	Content      ContentEnvelope   `json:"content"`
+	Metadata     map[string]any    `json:"metadata,omitempty"`
+	EncodedBytes int               `json:"-"`
 }
 
 type GuardrailSelector struct {

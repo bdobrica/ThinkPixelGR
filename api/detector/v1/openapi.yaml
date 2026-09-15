@@ -1,0 +1,103 @@
+openapi: 3.1.0
+info:
+  title: ThinkPixelGR Remote Detector API
+  version: 1.0.0
+  description: Versioned findings-only protocol implemented by replaceable remote detectors.
+paths:
+  /v1/detect:
+    post:
+      operationId: detect
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "./schema.json#/$defs/DetectionRequest"}
+      responses:
+        "200":
+          description: Detection completed, including when there are no findings.
+          content:
+            application/json:
+              schema: {$ref: "./schema.json#/$defs/DetectionResponse"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "413": {$ref: "#/components/responses/RequestTooLarge"}
+        "429": {$ref: "#/components/responses/Overloaded"}
+        "500": {$ref: "#/components/responses/InternalError"}
+        "503": {$ref: "#/components/responses/Unavailable"}
+  /v1/detect:batch:
+    post:
+      operationId: detectBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "./schema.json#/$defs/BatchDetectionRequest"}
+      responses:
+        "200":
+          description: Ordered responses for every request in the batch.
+          content:
+            application/json:
+              schema: {$ref: "./schema.json#/$defs/BatchDetectionResponse"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "413": {$ref: "#/components/responses/RequestTooLarge"}
+        "429": {$ref: "#/components/responses/Overloaded"}
+        "500": {$ref: "#/components/responses/InternalError"}
+        "503": {$ref: "#/components/responses/Unavailable"}
+  /v1/metadata:
+    get:
+      operationId: detectorMetadata
+      responses:
+        "200":
+          description: Immutable identity and advertised detector capabilities.
+          content:
+            application/json:
+              schema: {$ref: "./schema.json#/$defs/DetectorMetadata"}
+        "500": {$ref: "#/components/responses/InternalError"}
+        "503": {$ref: "#/components/responses/Unavailable"}
+  /health/live:
+    get:
+      operationId: detectorLive
+      responses:
+        "200": {$ref: "#/components/responses/Healthy"}
+  /health/ready:
+    get:
+      operationId: detectorReady
+      responses:
+        "200": {$ref: "#/components/responses/Healthy"}
+        "503": {$ref: "#/components/responses/NotReady"}
+components:
+  responses:
+    Healthy:
+      description: The process is live or ready.
+      content:
+        application/json:
+          schema: {$ref: "./schema.json#/$defs/Health"}
+    NotReady:
+      description: The detector cannot currently accept detection work.
+      content:
+        application/json:
+          schema: {$ref: "./schema.json#/$defs/Health"}
+    BadRequest:
+      description: The request is malformed or uses an unsupported capability.
+      content:
+        application/json:
+          schema: {$ref: "./schema.json#/$defs/Error"}
+    RequestTooLarge:
+      description: The request exceeds an advertised input or batch limit.
+      content:
+        application/json:
+          schema: {$ref: "./schema.json#/$defs/Error"}
+    Overloaded:
+      description: The detector has no bounded capacity for this request.
+      content:
+        application/json:
+          schema: {$ref: "./schema.json#/$defs/Error"}
+    InternalError:
+      description: Detection failed inside the service.
+      content:
+        application/json:
+          schema: {$ref: "./schema.json#/$defs/Error"}
+    Unavailable:
+      description: The detector is not ready or temporarily unavailable.
+      content:
+        application/json:
+          schema: {$ref: "./schema.json#/$defs/Error"}

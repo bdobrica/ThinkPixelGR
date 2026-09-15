@@ -18,9 +18,9 @@ material belong under [`docs/`](docs/README.md).
 
 ## Next implementation slice
 
-- [ ] Complete Phase 1 deterministic detectors: request limits, allow/deny lists,
+- [x] Complete Phase 1 deterministic detectors: request limits, allow/deny lists,
   JSON Schema validation, and structured secret detection.
-- [ ] Define and test the remote detector wire contract before adding Python
+- [x] Define and test the remote detector wire contract before adding Python
   detector adapters.
 - [ ] Enforce per-policy and per-detector deadlines and document fail-open,
   fail-closed, and monitor-on-failure behavior in the public contract.

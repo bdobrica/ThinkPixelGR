@@ -41,3 +41,60 @@ func TestMatchKeywordCaseInsensitive(t *testing.T) {
 		t.Fatalf("spans = %#v", got)
 	}
 }
+
+func TestResolverCompilesAllDeterministicDetectorTypes(t *testing.T) {
+	detectors := []config.Detector{
+		{ID: "limits", RequestLimits: &config.RequestLimits{MaxMessages: 1}},
+		{ID: "list", AllowDeny: &config.AllowDeny{Selector: "target.model", Allow: []string{"model"}}},
+		{ID: "schema", JSONSchema: &config.JSONSchema{Target: "content.data", Schema: map[string]any{"type": "object"}}},
+		{ID: "secrets", Secrets: &config.Secrets{}},
+	}
+	cfg := &config.Config{Policies: []config.Policy{{Metadata: config.Metadata{ID: "all", Version: 1}, Spec: config.PolicySpec{Action: domain.ActionBlock, Detectors: detectors}}}}
+	r, err := NewResolver(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.policies["all@1"].Detectors) != len(detectors) || r.policies["all@1"].Detectors[2].JSONSchema == nil {
+		t.Fatalf("compiled = %#v", r.policies["all@1"].Detectors)
+	}
+}
+
+func TestResolverRejectsInvalidDeterministicDetectorConfiguration(t *testing.T) {
+	tests := []config.Detector{
+		{ID: "none"},
+		{ID: "two", Keywords: &config.Keywords{Values: []string{"x"}}, Secrets: &config.Secrets{}},
+		{ID: "limits", RequestLimits: &config.RequestLimits{}},
+		{ID: "list", AllowDeny: &config.AllowDeny{Selector: "unsupported", Allow: []string{"x"}}},
+		{ID: "schema-target", JSONSchema: &config.JSONSchema{Target: "bad", Schema: map[string]any{"type": "object"}}},
+		{ID: "schema", JSONSchema: &config.JSONSchema{Target: "content.data", Schema: map[string]any{"type": "not-a-type"}}},
+		{ID: "external-schema", JSONSchema: &config.JSONSchema{Target: "content.data", Schema: map[string]any{"$ref": "file:///etc/passwd"}}},
+		{ID: "secret", Secrets: &config.Secrets{Types: []string{"unknown"}}},
+	}
+	for _, detector := range tests {
+		t.Run(detector.ID, func(t *testing.T) {
+			cfg := &config.Config{Policies: []config.Policy{{Metadata: config.Metadata{ID: "bad", Version: 1}, Spec: config.PolicySpec{Action: domain.ActionBlock, Detectors: []config.Detector{detector}}}}}
+			if _, err := NewResolver(cfg); err == nil {
+				t.Fatal("expected error")
+			}
+		})
+	}
+}
+
+func TestExampleConfigurationCompiles(t *testing.T) {
+	cfg, err := config.Load("../../configs/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewResolver(cfg); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestResolverRejectsRedactForNonTransformingDetector(t *testing.T) {
+	cfg := &config.Config{Policies: []config.Policy{{Metadata: config.Metadata{ID: "bad", Version: 1}, Spec: config.PolicySpec{
+		Action: domain.ActionRedact, Detectors: []config.Detector{{ID: "limits", RequestLimits: &config.RequestLimits{MaxMessages: 1}}},
+	}}}}
+	if _, err := NewResolver(cfg); err == nil {
+		t.Fatal("expected error")
+	}
+}

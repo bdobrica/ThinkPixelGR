@@ -1,0 +1,28 @@
+{
+  "responses": [
+    {
+      "request_id": "req_example_123",
+      "evaluation_id": "eval_example_789",
+      "detector": {
+        "id": "prompt-injection-mini",
+        "version": "3.1.0",
+        "revision": "sha256:detector-example-revision",
+        "model": null
+      },
+      "findings": [],
+      "timing": {"total_ms": 4}
+    },
+    {
+      "request_id": "req_example_124",
+      "evaluation_id": "eval_example_789",
+      "detector": {
+        "id": "prompt-injection-mini",
+        "version": "3.1.0",
+        "revision": "sha256:detector-example-revision",
+        "model": null
+      },
+      "findings": [],
+      "timing": {"total_ms": 3}
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "request_id": "req_example_123",
+  "evaluation_id": "eval_example_789",
+  "stage": "pre_model",
+  "content": {
+    "type": "messages",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Example text for detector conformance testing."
+      }
+    ]
+  },
+  "configuration": {
+    "threshold": 0.85,
+    "language": "en"
+  },
+  "metadata": {
+    "tenant_id": "tenant_example",
+    "trace_id": "trace_example_456"
+  }
+}

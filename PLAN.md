@@ -758,6 +758,12 @@ All Python model containers should implement a standard protocol.
 
 Start with HTTP/JSON for ease of implementation and debugging.
 
+The implemented normative protocol is defined by
+[`api/detector/v1/openapi.yaml`](api/detector/v1/openapi.yaml) and its adjacent
+JSON Schema. The examples below are design sketches; where they differ, the
+versioned contract and [ADR-0005](docs/adr/0005-versioned-remote-detector-http-contract.md)
+govern.
+
 ### 17.1 Required Endpoints
 
 ```http

@@ -1,0 +1,22 @@
+{
+  "requests": [
+    {
+      "request_id": "req_example_123",
+      "evaluation_id": "eval_example_789",
+      "stage": "pre_model",
+      "content": {
+        "type": "text",
+        "text": "First conformance item."
+      }
+    },
+    {
+      "request_id": "req_example_124",
+      "evaluation_id": "eval_example_789",
+      "stage": "pre_model",
+      "content": {
+        "type": "text",
+        "text": "Second conformance item."
+      }
+    }
+  ]
+}

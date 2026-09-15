@@ -1,18 +1,23 @@
 package policy
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/santhosh-tekuri/jsonschema/v5"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/config"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/domain"
 )
 
 type CompiledDetector struct {
-	Config config.Detector
-	Regex  *regexp.Regexp
+	Config     config.Detector
+	Regex      *regexp.Regexp
+	JSONSchema *jsonschema.Schema
 }
 
 type CompiledPolicy struct {
@@ -38,16 +43,60 @@ func NewResolver(cfg *config.Config) (*Resolver, error) {
 		}
 		compiled := CompiledPolicy{Config: p}
 		for _, detector := range p.Spec.Detectors {
-			if (detector.Regex == nil) == (detector.Keywords == nil) {
+			if detector.ID == "" {
+				return nil, fmt.Errorf("detector in %q requires an id", p.CanonicalID())
+			}
+			configured := countConfigured(detector)
+			if configured != 1 {
 				return nil, fmt.Errorf("detector %q in %q must configure exactly one detector type", detector.ID, p.CanonicalID())
 			}
+			if p.Spec.Action == domain.ActionRedact && (detector.RequestLimits != nil || detector.AllowDeny != nil || detector.JSONSchema != nil) {
+				return nil, fmt.Errorf("detector %q in %q cannot produce a redaction", detector.ID, p.CanonicalID())
+			}
 			cd := CompiledDetector{Config: detector}
-			if detector.Regex != nil {
+			switch {
+			case detector.Regex != nil:
 				re, err := regexp.Compile(detector.Regex.Pattern)
 				if err != nil {
 					return nil, fmt.Errorf("detector %q: %w", detector.ID, err)
 				}
 				cd.Regex = re
+			case detector.RequestLimits != nil:
+				if err := validateRequestLimits(detector.RequestLimits); err != nil {
+					return nil, fmt.Errorf("detector %q: %w", detector.ID, err)
+				}
+			case detector.AllowDeny != nil:
+				if err := validateAllowDeny(detector.AllowDeny); err != nil {
+					return nil, fmt.Errorf("detector %q: %w", detector.ID, err)
+				}
+			case detector.JSONSchema != nil:
+				if err := validateSchemaTarget(detector.JSONSchema.Target); err != nil {
+					return nil, fmt.Errorf("detector %q: %w", detector.ID, err)
+				}
+				if len(detector.JSONSchema.Schema) == 0 {
+					return nil, fmt.Errorf("detector %q: jsonSchema.schema is required", detector.ID)
+				}
+				compiler := jsonschema.NewCompiler()
+				compiler.LoadURL = func(url string) (io.ReadCloser, error) {
+					return nil, fmt.Errorf("external schema reference %q is not allowed", url)
+				}
+				resource := "urn:thinkpixelgr:detector:" + detector.ID
+				encoded, err := json.Marshal(detector.JSONSchema.Schema)
+				if err != nil {
+					return nil, fmt.Errorf("detector %q schema: %w", detector.ID, err)
+				}
+				if err := compiler.AddResource(resource, bytes.NewReader(encoded)); err != nil {
+					return nil, fmt.Errorf("detector %q schema: %w", detector.ID, err)
+				}
+				sch, err := compiler.Compile(resource)
+				if err != nil {
+					return nil, fmt.Errorf("detector %q schema: %w", detector.ID, err)
+				}
+				cd.JSONSchema = sch
+			case detector.Secrets != nil:
+				if err := validateSecrets(detector.Secrets); err != nil {
+					return nil, fmt.Errorf("detector %q: %w", detector.ID, err)
+				}
 			}
 			compiled.Detectors = append(compiled.Detectors, cd)
 		}
@@ -65,6 +114,72 @@ func NewResolver(cfg *config.Config) (*Resolver, error) {
 		}
 	}
 	return r, nil
+}
+
+func countConfigured(d config.Detector) int {
+	count := 0
+	for _, configured := range []bool{d.Regex != nil, d.Keywords != nil, d.RequestLimits != nil, d.AllowDeny != nil, d.JSONSchema != nil, d.Secrets != nil} {
+		if configured {
+			count++
+		}
+	}
+	return count
+}
+
+func validateRequestLimits(l *config.RequestLimits) error {
+	values := []int{l.MaxRequestBytes, l.MaxMessages, l.MaxMessageBytes, l.MaxTools, l.MaxAttachments, l.MaxEstimatedTokens}
+	configured := len(l.AllowedMIMETypes) > 0
+	for _, value := range values {
+		if value < 0 {
+			return fmt.Errorf("request limits cannot be negative")
+		}
+		configured = configured || value > 0
+	}
+	if !configured {
+		return fmt.Errorf("requestLimits requires at least one limit")
+	}
+	return nil
+}
+
+var allowDenySelectors = map[string]bool{
+	"target.model": true, "target.provider": true, "target.data_region": true,
+	"subject.roles": true, "content.tools": true, "content.domains": true, "content.file_types": true,
+}
+
+func validateAllowDeny(l *config.AllowDeny) error {
+	if !allowDenySelectors[l.Selector] {
+		return fmt.Errorf("unsupported allowDeny.selector %q", l.Selector)
+	}
+	if len(l.Allow) == 0 && len(l.Deny) == 0 {
+		return fmt.Errorf("allowDeny requires allow or deny values")
+	}
+	return nil
+}
+
+func validateSchemaTarget(target string) error {
+	switch target {
+	case "content", "content.data", "metadata", "subject", "target":
+		return nil
+	default:
+		return fmt.Errorf("unsupported jsonSchema.target %q", target)
+	}
+}
+
+var secretTypes = map[string]bool{
+	"pem_private_key": true, "authorization": true, "connection_string": true,
+	"known_token": true, "contextual_high_entropy": true,
+}
+
+func validateSecrets(s *config.Secrets) error {
+	if s.MinEntropy < 0 || s.MinEntropyLength < 0 {
+		return fmt.Errorf("secret entropy settings cannot be negative")
+	}
+	for _, typ := range s.Types {
+		if !secretTypes[typ] {
+			return fmt.Errorf("unsupported secret type %q", typ)
+		}
+	}
+	return nil
 }
 
 func (r *Resolver) Resolve(tenant, profile string, selected []string, stage domain.Stage) ([]CompiledPolicy, error) {

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "REQUEST_TOO_LARGE",
+    "message": "request exceeds max_input_bytes",
+    "retryable": false
+  }
+}

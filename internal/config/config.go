@@ -45,9 +45,13 @@ type PolicySpec struct {
 }
 
 type Detector struct {
-	ID       string    `yaml:"id"`
-	Regex    *Regex    `yaml:"regex,omitempty"`
-	Keywords *Keywords `yaml:"keywords,omitempty"`
+	ID            string         `yaml:"id"`
+	Regex         *Regex         `yaml:"regex,omitempty"`
+	Keywords      *Keywords      `yaml:"keywords,omitempty"`
+	RequestLimits *RequestLimits `yaml:"requestLimits,omitempty"`
+	AllowDeny     *AllowDeny     `yaml:"allowDeny,omitempty"`
+	JSONSchema    *JSONSchema    `yaml:"jsonSchema,omitempty"`
+	Secrets       *Secrets       `yaml:"secrets,omitempty"`
 }
 
 type Regex struct {
@@ -63,6 +67,43 @@ type Keywords struct {
 	CaseSensitive bool     `yaml:"caseSensitive,omitempty"`
 	Replacement   string   `yaml:"replacement,omitempty"`
 	Severity      string   `yaml:"severity,omitempty"`
+}
+
+type RequestLimits struct {
+	MaxRequestBytes    int      `yaml:"maxRequestBytes,omitempty"`
+	MaxMessages        int      `yaml:"maxMessages,omitempty"`
+	MaxMessageBytes    int      `yaml:"maxMessageBytes,omitempty"`
+	MaxTools           int      `yaml:"maxTools,omitempty"`
+	MaxAttachments     int      `yaml:"maxAttachments,omitempty"`
+	MaxEstimatedTokens int      `yaml:"maxEstimatedTokens,omitempty"`
+	AllowedMIMETypes   []string `yaml:"allowedMIMETypes,omitempty"`
+	Category           string   `yaml:"category,omitempty"`
+	Severity           string   `yaml:"severity,omitempty"`
+}
+
+type AllowDeny struct {
+	Selector      string   `yaml:"selector"`
+	Allow         []string `yaml:"allow,omitempty"`
+	Deny          []string `yaml:"deny,omitempty"`
+	CaseSensitive bool     `yaml:"caseSensitive,omitempty"`
+	Category      string   `yaml:"category,omitempty"`
+	Severity      string   `yaml:"severity,omitempty"`
+}
+
+type JSONSchema struct {
+	Target   string         `yaml:"target"`
+	Schema   map[string]any `yaml:"schema"`
+	Category string         `yaml:"category,omitempty"`
+	Severity string         `yaml:"severity,omitempty"`
+}
+
+type Secrets struct {
+	Types            []string `yaml:"types,omitempty"`
+	MinEntropy       float64  `yaml:"minEntropy,omitempty"`
+	MinEntropyLength int      `yaml:"minEntropyLength,omitempty"`
+	CategoryPrefix   string   `yaml:"categoryPrefix,omitempty"`
+	Replacement      string   `yaml:"replacement,omitempty"`
+	Severity         string   `yaml:"severity,omitempty"`
 }
 
 type Profile struct {

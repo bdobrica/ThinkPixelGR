@@ -39,7 +39,8 @@ func (h *handler) policies(w http.ResponseWriter, _ *http.Request) {
 
 func (h *handler) evaluate(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
-	decoder := json.NewDecoder(r.Body)
+	counted := &countingReader{reader: r.Body}
+	decoder := json.NewDecoder(counted)
 	decoder.DisallowUnknownFields()
 	var req domain.EvaluationRequest
 	if err := decoder.Decode(&req); err != nil {
@@ -58,6 +59,7 @@ func (h *handler) evaluate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "stage is invalid")
 		return
 	}
+	req.EncodedBytes = counted.bytes
 	result, err := h.evaluator.Evaluate(r.Context(), req)
 	if err != nil {
 		if errors.Is(err, r.Context().Err()) {
@@ -69,6 +71,17 @@ func (h *handler) evaluate(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("evaluation completed", "evaluation_id", result.EvaluationID, "request_id", result.RequestID, "action", result.Decision.Action, "findings", len(result.Findings), "duration_ms", result.Timing.TotalMS)
 	writeJSON(w, http.StatusOK, result)
+}
+
+type countingReader struct {
+	reader io.Reader
+	bytes  int
+}
+
+func (r *countingReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	r.bytes += n
+	return n, err
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {

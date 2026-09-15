@@ -11,10 +11,12 @@ optional transformations, and decisions for the caller to enforce.
 ## Status
 
 The initial runnable Go vertical slice loads YAML policies and profiles,
-resolves mandatory and selected policies, and evaluates text with regex and
-keyword detectors. It supports `allow`, `block`, `redact`, and `monitor`.
-Remote model-backed detectors, authentication, live configuration reload,
-observability, and production deployment remain planned work.
+resolves mandatory and selected policies, and runs the Phase 1 deterministic
+detectors: regex, keywords, request limits, allow/deny lists, JSON Schema, and
+structured secret detection. It supports `allow`, `block`, `redact`, and `monitor`.
+The versioned remote-detector wire contract and conformance tests are published;
+remote adapters, authentication, live configuration reload, observability, and
+production deployment remain planned work.
 
 See the [documentation index](docs/README.md), [implementation ledger](TODO.md),
 and [implementation plan](PLAN.md) for authoritative detail.

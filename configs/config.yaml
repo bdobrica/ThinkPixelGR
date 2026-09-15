@@ -1,5 +1,6 @@
 platform:
   mandatoryPolicies:
+    - platform/request-limits@1
     - platform/secrets@1
 
 tenants:
@@ -9,6 +10,22 @@ tenants:
 
 policies:
   - metadata:
+      id: platform/request-limits
+      version: 1
+    spec:
+      stages: [pre_request, pre_model, post_model, pre_tool, post_tool, pre_retrieval, post_retrieval, ingestion]
+      action: block
+      detectors:
+        - id: builtin/request-limits@1
+          requestLimits:
+            maxRequestBytes: 900000
+            maxMessages: 256
+            maxMessageBytes: 262144
+            maxTools: 128
+            maxAttachments: 32
+            maxEstimatedTokens: 262144
+
+  - metadata:
       id: platform/secrets
       version: 1
     spec:
@@ -16,18 +33,10 @@ policies:
       action: redact
       timeout: 25ms
       detectors:
-        - id: builtin/private-key-header@1
-          regex:
-            pattern: '-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----'
-            category: secret.private_key
-            replacement: '<PRIVATE_KEY>'
+        - id: builtin/structured-secrets@1
+          secrets:
+            replacement: '<SECRET>'
             severity: critical
-        - id: builtin/bearer-token@1
-          regex:
-            pattern: '(?i)bearer[ ]+[a-z0-9._~+/=-]{12,}'
-            category: secret.bearer_token
-            replacement: '<BEARER_TOKEN>'
-            severity: high
 
   - metadata:
       id: tenant/demo/pii
@@ -56,6 +65,38 @@ policies:
             category: prompt_injection.indicator
             severity: high
 
+  - metadata:
+      id: platform/model-list
+      version: 1
+    spec:
+      stages: [pre_request, pre_model]
+      action: block
+      detectors:
+        - id: builtin/model-list@1
+          allowDeny:
+            selector: target.model
+            deny: [unapproved-model]
+            category: request.model_denied
+
+  - metadata:
+      id: application/tool-arguments
+      version: 1
+    spec:
+      stages: [pre_tool]
+      action: block
+      detectors:
+        - id: builtin/tool-arguments-schema@1
+          jsonSchema:
+            target: content.data
+            category: schema.tool_arguments
+            schema:
+              type: object
+              required: [tool, arguments]
+              properties:
+                tool: {type: string, minLength: 1}
+                arguments: {type: object}
+              additionalProperties: false
+
 profiles:
   - metadata:
       id: baseline
@@ -63,3 +104,4 @@ profiles:
     spec:
       policies:
         - platform/injection-keywords@1
+        - platform/model-list@1
