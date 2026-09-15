@@ -46,6 +46,34 @@ func TestOpenAPIExposesDetectorFailuresAndPolicyTiming(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDocumentsDeploymentSelectedBearerAuthentication(t *testing.T) {
+	document := readDocument(t)
+	bearer, ok := nestedMap(document, "components", "securitySchemes", "BearerAuth")
+	if !ok || bearer["type"] != "http" || bearer["scheme"] != "bearer" {
+		t.Fatalf("BearerAuth scheme = %#v", bearer)
+	}
+	security, ok := document["security"].([]any)
+	if !ok || len(security) != 2 {
+		t.Fatalf("global security = %#v", document["security"])
+	}
+	for _, path := range []string{"/health/live", "/health/ready"} {
+		operation, ok := nestedMap(document, "paths", path, "get")
+		if !ok {
+			t.Fatalf("missing health operation %s", path)
+		}
+		anonymous, ok := operation["security"].([]any)
+		if !ok || len(anonymous) != 0 {
+			t.Fatalf("%s security = %#v", path, operation["security"])
+		}
+	}
+	for _, endpoint := range []struct{ path, method string }{{"/v1/evaluations", "post"}, {"/v1/policies", "get"}} {
+		responses, ok := nestedMap(document, "paths", endpoint.path, endpoint.method, "responses")
+		if !ok || responses["401"] == nil || responses["403"] == nil {
+			t.Fatalf("%s auth responses = %#v", endpoint.path, responses)
+		}
+	}
+}
+
 func containsString(value any, expected string) bool {
 	items, _ := value.([]any)
 	for _, item := range items {

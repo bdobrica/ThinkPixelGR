@@ -11,6 +11,7 @@ authorization of Runs, tools, models, Workspaces, and memory.
 - [ADR-0003: Policy resolution and versioning](adr/0003-policy-resolution-and-versioning.md)
 - [ADR-0004: Detector ports and failure semantics](adr/0004-detector-ports-and-failure-semantics.md)
 - [ADR-0005: Versioned remote detector HTTP contract](adr/0005-versioned-remote-detector-http-contract.md)
+- [ADR-0006: Authenticated tenant-scoped evaluation](adr/0006-authenticated-tenant-scoped-evaluation.md)
 
 ## Contracts and implementation intent
 
@@ -18,6 +19,7 @@ authorization of Runs, tools, models, Workspaces, and memory.
 - [Evaluation API v1 compatibility notes](contracts/evaluation-api-v1.md)
 - [Deterministic detector configuration](contracts/deterministic-detectors-v1.md)
 - [Remote detector protocol v1](contracts/remote-detector-v1.md)
+- [Authentication and tenant authorization](security/authentication.md)
 - [Repository alignment](../ALIGNMENT.md)
 - [Implementation plan](../PLAN.md)
 - [Implementation ledger](../TODO.md)

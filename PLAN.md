@@ -1790,7 +1790,7 @@ Create architecture decision records for:
 
 Resolve these before or during Phase 1:
 
-1. Will the guardrails service authenticate tenants directly, or trust signed tenant context from the gateway?
+1. Resolved by ADR-0006: authenticate callers through a replaceable ingress port and authorize caller-supplied tenant context against the server-established principal.
 2. Which request content representation will be canonical: generic message arrays, provider-neutral content blocks, or both?
 3. Should transformed content be returned inline or retrieved through a separate endpoint for highly sensitive use cases?
 4. How will policy authors specify overlapping redaction rules?

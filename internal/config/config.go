@@ -11,9 +11,23 @@ import (
 
 type Config struct {
 	Platform PlatformConfig    `yaml:"platform"`
+	Auth     AuthConfig        `yaml:"auth"`
 	Tenants  map[string]Tenant `yaml:"tenants"`
 	Policies []Policy          `yaml:"policies"`
 	Profiles []Profile         `yaml:"profiles"`
+}
+
+type AuthConfig struct {
+	Enabled    bool            `yaml:"enabled"`
+	Principals []AuthPrincipal `yaml:"principals"`
+}
+
+type AuthPrincipal struct {
+	ID              string   `yaml:"id"`
+	TokenEnv        string   `yaml:"tokenEnv"`
+	Tenants         []string `yaml:"tenants,omitempty"`
+	AllowTenantless bool     `yaml:"allowTenantless,omitempty"`
+	PolicyReader    bool     `yaml:"policyReader,omitempty"`
 }
 
 type PlatformConfig struct {

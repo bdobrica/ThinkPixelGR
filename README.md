@@ -16,8 +16,9 @@ detectors: regex, keywords, request limits, allow/deny lists, JSON Schema, and
 structured secret detection. It supports `allow`, `block`, `redact`, and `monitor`.
 The versioned remote-detector wire contract and conformance tests are published;
 policy and detector deadlines now enforce explicit fail-open, fail-closed, or
-monitor-on-failure behavior. Remote adapters, authentication, live configuration
-reload, observability, and production deployment remain planned work.
+monitor-on-failure behavior. Bearer-authenticated callers are bound to explicit
+tenant and API scopes. Remote adapters, live configuration reload,
+observability, and production deployment remain planned work.
 
 See the [documentation index](docs/README.md), [implementation ledger](TODO.md),
 and [implementation plan](PLAN.md) for authoritative detail.
@@ -28,6 +29,7 @@ Prerequisites: Go 1.24 or Docker.
 
 ```bash
 make verify
+export THINKPIXELGR_DEMO_TOKEN="$(openssl rand -hex 32)"
 make run
 ```
 
@@ -36,6 +38,7 @@ In another terminal, evaluate a request using the included `demo` tenant and
 
 ```bash
 curl --fail-with-body http://localhost:8080/v1/evaluations \
+  -H "Authorization: Bearer ${THINKPIXELGR_DEMO_TOKEN}" \
   -H 'Content-Type: application/json' \
   -d '{
     "request_id": "req_demo",
@@ -52,8 +55,8 @@ curl --fail-with-body http://localhost:8080/v1/evaluations \
 ```
 
 The response redacts the email address. Include “ignore previous instructions”
-to exercise the blocking path. Run the containerized service with
-`docker compose up --build`.
+to exercise the blocking path. With the same environment variable set, run the
+containerized service with `docker compose up --build`.
 
 ## Key concepts
 

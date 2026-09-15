@@ -8,6 +8,7 @@ import (
 	"time"
 
 	httpapi "github.com/thinkpixelgr/thinkpixelgr/internal/api/http"
+	"github.com/thinkpixelgr/thinkpixelgr/internal/auth"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/config"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/engine"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/policy"
@@ -23,6 +24,14 @@ func main() {
 		slog.Error("configuration failed", "error", err)
 		os.Exit(1)
 	}
+	var access auth.Controller = auth.Disabled{}
+	if cfg.Auth.Enabled {
+		access, err = auth.NewStaticBearer(cfg.Auth, os.LookupEnv)
+		if err != nil {
+			slog.Error("authentication configuration failed", "error", err)
+			os.Exit(1)
+		}
+	}
 
 	resolver, err := policy.NewResolver(cfg)
 	if err != nil {
@@ -30,7 +39,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	handler := httpapi.New(engine.New(resolver), resolver)
+	handler := httpapi.New(engine.New(resolver), resolver, access)
 	server := &http.Server{
 		Addr:              *address,
 		Handler:           handler,

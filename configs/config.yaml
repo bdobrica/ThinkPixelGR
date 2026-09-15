@@ -1,3 +1,11 @@
+auth:
+  enabled: true
+  principals:
+    - id: local/demo-client
+      tokenEnv: THINKPIXELGR_DEMO_TOKEN
+      tenants: [demo]
+      policyReader: true
+
 platform:
   mandatoryPolicies:
     - platform/request-limits@1

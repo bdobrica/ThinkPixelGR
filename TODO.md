@@ -24,7 +24,7 @@ material belong under [`docs/`](docs/README.md).
   detector adapters.
 - [x] Enforce per-policy and per-detector deadlines and document fail-open,
   fail-closed, and monitor-on-failure behavior in the public contract.
-- [ ] Add authentication and tenant authorization without treating a guardrail
+- [x] Add authentication and tenant authorization without treating a guardrail
   decision as Run or tool authority.
 - [ ] Add structured audit events, metrics, and tracing that exclude raw content
   and secrets by default.

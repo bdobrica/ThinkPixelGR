@@ -31,6 +31,29 @@ func TestLoadParsesPolicyAndDetectorTimeouts(t *testing.T) {
 	}
 }
 
+func TestLoadParsesAuthenticationPrincipalScopes(t *testing.T) {
+	path := writeConfig(t, `auth:
+  enabled: true
+  principals:
+    - id: gateway
+      tokenEnv: TEST_GATEWAY_TOKEN
+      tenants: [tenant-a]
+      allowTenantless: true
+      policyReader: true
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Auth.Enabled || len(cfg.Auth.Principals) != 1 {
+		t.Fatalf("auth = %#v", cfg.Auth)
+	}
+	principal := cfg.Auth.Principals[0]
+	if principal.ID != "gateway" || principal.TokenEnv != "TEST_GATEWAY_TOKEN" || len(principal.Tenants) != 1 || principal.Tenants[0] != "tenant-a" || !principal.AllowTenantless || !principal.PolicyReader {
+		t.Fatalf("principal = %#v", principal)
+	}
+}
+
 func TestLoadRejectsInvalidDetectorTimeout(t *testing.T) {
 	path := writeConfig(t, `policies:
   - metadata: {id: test/policy, version: 1}

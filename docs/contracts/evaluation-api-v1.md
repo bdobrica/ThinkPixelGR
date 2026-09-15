@@ -3,6 +3,29 @@
 The canonical machine-readable contract is [`api/openapi.yaml`](../../api/openapi.yaml).
 These notes record compatible clarifications and additions within `/v1`.
 
+## Authentication and tenant authorization
+
+Deployments can protect `POST /v1/evaluations` and `GET /v1/policies` with the
+OpenAPI `BearerAuth` scheme. The shipped configuration enables authentication;
+deployments retaining the explicit disabled mode remain wire-compatible with
+anonymous v1 clients. Health endpoints remain anonymous in either mode.
+
+With authentication enabled, a missing or invalid credential returns `401`
+with a Bearer challenge. A valid principal that lacks the requested tenant
+scope or policy-list capability returns `403`. `tenant_id` is caller-provided
+routing context that MUST be checked against the server-established principal;
+it is not identity evidence. Omission requires an explicit tenantless scope.
+
+The `subject`, `target`, `metadata`, content, and guardrail selector objects are
+untrusted inputs to evaluation. They MUST NOT establish or expand API, tenant,
+Run, model, tool, Workspace, memory, credential, or side-effect authority. A
+guardrail decision has no such authority either: `allow` means only that the
+applied guardrail policies did not reject the evaluated content.
+
+Bearer authentication, `401`, and `403` are additive v1 contract capabilities.
+Enabling authentication is an operationally significant deployment change, so
+operators must distribute credentials before switching existing clients.
+
 ## Finding attributes
 
 `Finding.attributes` is an optional object containing structured, non-content

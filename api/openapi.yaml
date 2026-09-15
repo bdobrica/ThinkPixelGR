@@ -1,19 +1,24 @@
 openapi: 3.1.0
 info:
   title: ThinkPixelGR API
-  version: 0.1.0
+  version: 0.2.0
   description: Policy-driven evaluation for LLM-adjacent content.
 servers:
   - url: http://localhost:8080
+security:
+  - BearerAuth: []
+  - {}
 paths:
   /health/live:
     get:
       operationId: live
+      security: []
       responses:
         "200": { $ref: "#/components/responses/Health" }
   /health/ready:
     get:
       operationId: ready
+      security: []
       responses:
         "200": { $ref: "#/components/responses/Health" }
   /v1/policies:
@@ -29,6 +34,8 @@ paths:
                 required: [policies]
                 properties:
                   policies: { type: array, items: { type: string } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/evaluations:
     post:
       operationId: evaluate
@@ -45,9 +52,16 @@ paths:
               schema: { $ref: "#/components/schemas/EvaluationResponse" }
         "400":
           description: Invalid request or unknown policy/profile.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "504":
           description: The caller or overall evaluation context expired; no policy failure mode was applied.
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: A deployment-issued credential mapped server-side to tenant and API capabilities.
   responses:
     Health:
       description: Healthy.
@@ -56,7 +70,33 @@ components:
           schema:
             type: object
             properties: { status: { type: string, const: ok } }
+    Unauthorized:
+      description: Bearer authentication is missing or invalid.
+      headers:
+        WWW-Authenticate:
+          schema: { type: string, const: Bearer }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: The authenticated principal lacks the requested tenant or API capability.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            retryable: { type: boolean }
+          additionalProperties: false
+      additionalProperties: false
     EvaluationRequest:
       type: object
       required: [request_id, stage, content]
@@ -65,14 +105,19 @@ components:
         stage:
           type: string
           enum: [pre_request, pre_model, post_model, pre_tool, post_tool, pre_retrieval, post_retrieval, ingestion]
-        tenant_id: { type: string }
+        tenant_id:
+          type: string
+          description: Must be within the authenticated principal's server-side tenant scope. Omission requires an explicit tenantless scope.
         guardrails:
           type: object
           properties:
             profile: { type: string }
             policies: { type: array, items: { type: string } }
         content: { $ref: "#/components/schemas/Content" }
-        subject: { type: object, additionalProperties: true }
+        subject:
+          type: object
+          description: Untrusted evaluation input; it does not establish identity or authority.
+          additionalProperties: true
         target: { type: object, additionalProperties: true }
         metadata: { type: object, additionalProperties: true }
     Content:

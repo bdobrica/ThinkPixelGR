@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/thinkpixelgr/thinkpixelgr/internal/auth"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/domain"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/engine"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/policy"
@@ -17,15 +18,16 @@ const maxBodyBytes = 1 << 20
 type handler struct {
 	evaluator *engine.Evaluator
 	resolver  *policy.Resolver
+	access    auth.Controller
 }
 
-func New(evaluator *engine.Evaluator, resolver *policy.Resolver) http.Handler {
-	h := &handler{evaluator: evaluator, resolver: resolver}
+func New(evaluator *engine.Evaluator, resolver *policy.Resolver, access auth.Controller) http.Handler {
+	h := &handler{evaluator: evaluator, resolver: resolver, access: access}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health/live", h.health)
 	mux.HandleFunc("GET /health/ready", h.health)
-	mux.HandleFunc("GET /v1/policies", h.policies)
-	mux.HandleFunc("POST /v1/evaluations", h.evaluate)
+	mux.Handle("GET /v1/policies", h.requireAuthentication(http.HandlerFunc(h.policies)))
+	mux.Handle("POST /v1/evaluations", h.requireAuthentication(http.HandlerFunc(h.evaluate)))
 	return requestLog(mux)
 }
 
@@ -33,7 +35,12 @@ func (h *handler) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (h *handler) policies(w http.ResponseWriter, _ *http.Request) {
+func (h *handler) policies(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok || h.access.AuthorizePolicyList(r.Context(), principal) != nil {
+		writeError(w, http.StatusForbidden, "FORBIDDEN", "operation is not authorized")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"policies": h.resolver.PolicyIDs()})
 }
 
@@ -59,6 +66,11 @@ func (h *handler) evaluate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "stage is invalid")
 		return
 	}
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok || h.access.AuthorizeTenant(r.Context(), principal, req.TenantID) != nil {
+		writeError(w, http.StatusForbidden, "FORBIDDEN", "tenant is not authorized")
+		return
+	}
 	req.EncodedBytes = counted.bytes
 	result, err := h.evaluator.Evaluate(r.Context(), req)
 	if err != nil {
@@ -71,6 +83,18 @@ func (h *handler) evaluate(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("evaluation completed", "evaluation_id", result.EvaluationID, "request_id", result.RequestID, "action", result.Decision.Action, "findings", len(result.Findings), "detector_failures", len(result.DetectorFailures), "duration_ms", result.Timing.TotalMS)
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *handler) requireAuthentication(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		principal, err := h.access.Authenticate(r.Context(), r.Header.Get("Authorization"))
+		if err != nil {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "valid bearer authentication is required")
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(auth.WithPrincipal(r.Context(), principal)))
+	})
 }
 
 type countingReader struct {
