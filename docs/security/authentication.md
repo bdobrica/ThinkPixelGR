@@ -20,6 +20,7 @@ auth:
       tenants: [tenant-a, tenant-b]
       allowTenantless: false
       policyReader: false
+      metricsReader: false
 ```
 
 Set `THINKPIXELGR_GATEWAY_TOKEN` in the process environment before startup. A
@@ -37,7 +38,8 @@ Bearer` challenge. A valid principal without the requested tenant scope returns
 Tenant access is exact by default. `tenants: ["*"]` explicitly permits every
 non-empty tenant. `allowTenantless: true` independently permits requests that
 omit `tenant_id`. `policyReader: true` independently permits `GET /v1/policies`.
-Neither wildcard access nor policy discovery is inferred from another scope.
+`metricsReader: true` independently permits `GET /metrics`. Wildcard tenant
+access, policy discovery, and metrics access are not inferred from one another.
 
 The request's `subject`, roles, metadata, content, target, or selected policies
 are untrusted evaluation input and cannot change these scopes. Likewise, a
@@ -53,6 +55,6 @@ guardrail result cannot grant permissions to a Run or operation.
   the service. Use distinct credentials for distinct principals.
 - Omitting `auth` or setting `auth.enabled: false` selects compatibility mode.
   Use it only in a trusted local environment: it permits all tenant and
-  policy-list access and is not suitable for a shared deployment.
+  policy-list and metrics access and is not suitable for a shared deployment.
 - Prefer a future workload-identity, mTLS, or OIDC adapter when identity-aware
   infrastructure and revocation are required.

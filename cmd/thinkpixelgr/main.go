@@ -11,10 +11,18 @@ import (
 	"github.com/thinkpixelgr/thinkpixelgr/internal/auth"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/config"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/engine"
+	"github.com/thinkpixelgr/thinkpixelgr/internal/observability"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/policy"
 )
 
 func main() {
+	logLevel := slog.LevelInfo
+	if os.Getenv("THINKPIXELGR_LOG_LEVEL") == "debug" {
+		logLevel = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
+	slog.SetDefault(logger)
+
 	configPath := flag.String("config", envOr("THINKPIXELGR_CONFIG", "./configs/config.yaml"), "configuration file")
 	address := flag.String("listen", envOr("THINKPIXELGR_LISTEN", ":8080"), "HTTP listen address")
 	flag.Parse()
@@ -39,7 +47,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	handler := httpapi.New(engine.New(resolver), resolver, access)
+	observer := observability.New(logger)
+	handler := httpapi.New(engine.New(resolver, observer), resolver, access, observer)
 	server := &http.Server{
 		Addr:              *address,
 		Handler:           handler,

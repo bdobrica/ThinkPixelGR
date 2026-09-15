@@ -16,6 +16,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/config"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/domain"
+	"github.com/thinkpixelgr/thinkpixelgr/internal/observability"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/policy"
 )
 
@@ -59,10 +60,15 @@ func (e *DetectorError) Unwrap() error { return e.Err }
 type Evaluator struct {
 	resolver *policy.Resolver
 	executor detectorExecutor
+	tracer   observability.Tracer
 }
 
-func New(resolver *policy.Resolver) *Evaluator {
-	return &Evaluator{resolver: resolver, executor: builtinExecutor{}}
+func New(resolver *policy.Resolver, tracers ...observability.Tracer) *Evaluator {
+	tracer := observability.Tracer(observability.Nop{})
+	if len(tracers) > 0 && tracers[0] != nil {
+		tracer = tracers[0]
+	}
+	return &Evaluator{resolver: resolver, executor: builtinExecutor{}, tracer: tracer}
 }
 
 type replacement struct {
@@ -72,13 +78,23 @@ type replacement struct {
 
 func (e *Evaluator) Evaluate(ctx context.Context, req domain.EvaluationRequest) (domain.EvaluationResponse, error) {
 	started := time.Now()
+	tracer := e.tracer
+	if tracer == nil {
+		tracer = observability.Nop{}
+	}
+	ctx, evaluationSpan := tracer.StartSpan(ctx, "guardrails.evaluate", observability.SpanAttributes{Stage: string(req.Stage)})
+	spanStatus := "error"
+	defer func() { evaluationSpan.End(spanStatus) }()
 	if err := ctx.Err(); err != nil {
 		return domain.EvaluationResponse{}, err
 	}
+	_, resolutionSpan := tracer.StartSpan(ctx, "policy.resolve", observability.SpanAttributes{Stage: string(req.Stage)})
 	policies, err := e.resolver.Resolve(req.TenantID, req.Guardrails.Profile, req.Guardrails.Policies, req.Stage)
 	if err != nil {
+		resolutionSpan.End("error")
 		return domain.EvaluationResponse{}, err
 	}
+	resolutionSpan.End("ok")
 
 	response := domain.EvaluationResponse{
 		EvaluationID: newID(), RequestID: req.RequestID,
@@ -110,6 +126,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, req domain.EvaluationRequest) 
 			scope, timeout := effectiveDetectorTimeout(policyCtx, detector.Config.Timeout)
 			detectorCtx, cancelDetector := context.WithTimeout(policyCtx, timeout)
 			detectorStart := time.Now()
+			detectorCtx, detectorSpan := tracer.StartSpan(detectorCtx, "detector.evaluate", observability.SpanAttributes{Stage: string(req.Stage), PolicyID: policyID, DetectorID: detector.Config.ID})
 			result, detectorErr := e.executor.Evaluate(detectorCtx, detector, req)
 			response.Timing.Detectors[detector.Config.ID] += time.Since(detectorStart).Milliseconds()
 			if detectorErr == nil && detectorCtx.Err() != nil {
@@ -117,6 +134,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, req domain.EvaluationRequest) 
 			}
 			cancelDetector()
 			if detectorErr != nil {
+				detectorSpan.End("error")
 				if err := ctx.Err(); err != nil {
 					cancelPolicy()
 					return domain.EvaluationResponse{}, err
@@ -133,6 +151,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, req domain.EvaluationRequest) 
 				}
 				continue
 			}
+			detectorSpan.End("ok")
 
 			response.Findings = append(response.Findings, result.findings...)
 			if len(result.findings) == 0 {
@@ -149,14 +168,19 @@ func (e *Evaluator) Evaluate(ctx context.Context, req domain.EvaluationRequest) 
 		cancelPolicy()
 		response.Timing.Policies[policyID] += time.Since(policyStart).Milliseconds()
 	}
+	_, aggregationSpan := tracer.StartSpan(ctx, "decision.aggregate", observability.SpanAttributes{Stage: string(req.Stage)})
 	if winningReason != "" {
 		response.Decision.Reason = winningReason
 	}
+	aggregationSpan.End("ok")
 	if response.Decision.Action == domain.ActionRedact && len(replacements) > 0 {
+		_, transformationSpan := tracer.StartSpan(ctx, "content.transform", observability.SpanAttributes{Stage: string(req.Stage)})
 		transformed := applyReplacements(req.Content, replacements)
 		response.Decision.TransformedContent = &transformed
+		transformationSpan.End("ok")
 	}
 	response.Timing.TotalMS = time.Since(started).Milliseconds()
+	spanStatus = "ok"
 	return response, nil
 }
 

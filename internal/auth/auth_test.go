@@ -13,7 +13,7 @@ import (
 func TestStaticBearerAuthenticatesAndAuthorizesConfiguredScope(t *testing.T) {
 	token := strings.Repeat("t", 32)
 	controller, err := NewStaticBearer(config.AuthConfig{Enabled: true, Principals: []config.AuthPrincipal{{
-		ID: "gateway", TokenEnv: "TEST_TOKEN", Tenants: []string{"tenant-a"}, PolicyReader: true,
+		ID: "gateway", TokenEnv: "TEST_TOKEN", Tenants: []string{"tenant-a"}, PolicyReader: true, MetricsReader: true,
 	}}}, func(name string) (string, bool) { return token, name == "TEST_TOKEN" })
 	if err != nil {
 		t.Fatal(err)
@@ -33,6 +33,9 @@ func TestStaticBearerAuthenticatesAndAuthorizesConfiguredScope(t *testing.T) {
 	}
 	if err := controller.AuthorizePolicyList(context.Background(), principal); err != nil {
 		t.Fatalf("authorize policy list: %v", err)
+	}
+	if err := controller.AuthorizeMetrics(context.Background(), principal); err != nil {
+		t.Fatalf("authorize metrics: %v", err)
 	}
 	if strings.Contains(fmt.Sprintf("%#v", controller), token) {
 		t.Fatal("controller retained the raw token")
@@ -64,6 +67,9 @@ func TestStaticBearerSupportsExplicitWildcardAndTenantlessScopes(t *testing.T) {
 	}
 	if !errors.Is(controller.AuthorizePolicyList(context.Background(), principal), ErrForbidden) {
 		t.Fatal("principal without policyReader was authorized to list policies")
+	}
+	if !errors.Is(controller.AuthorizeMetrics(context.Background(), principal), ErrForbidden) {
+		t.Fatal("principal without metricsReader was authorized to read metrics")
 	}
 }
 

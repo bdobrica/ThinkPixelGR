@@ -5,6 +5,7 @@ auth:
       tokenEnv: THINKPIXELGR_DEMO_TOKEN
       tenants: [demo]
       policyReader: true
+      metricsReader: true
 
 platform:
   mandatoryPolicies:

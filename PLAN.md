@@ -1796,7 +1796,7 @@ Resolve these before or during Phase 1:
 4. How will policy authors specify overlapping redaction rules?
 5. Which fields may request-level policy overrides change?
 6. What is the maximum supported request size for synchronous evaluation?
-7. Which audit backend will be supported first?
+7. Resolved by ADR-0007: emit versioned structured audit events to the process JSON logger through a replaceable port; durable storage remains a deployment adapter concern.
 8. Will observational checks execute synchronously without affecting decisions, or through a durable queue?
 9. Which first open-source models will be bundled and under what licenses?
 10. What minimum accuracy and latency criteria must a detector meet before becoming nonexperimental?

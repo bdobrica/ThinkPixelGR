@@ -28,6 +28,7 @@ type AuthPrincipal struct {
 	Tenants         []string `yaml:"tenants,omitempty"`
 	AllowTenantless bool     `yaml:"allowTenantless,omitempty"`
 	PolicyReader    bool     `yaml:"policyReader,omitempty"`
+	MetricsReader   bool     `yaml:"metricsReader,omitempty"`
 }
 
 type PlatformConfig struct {

@@ -40,6 +40,7 @@ func TestLoadParsesAuthenticationPrincipalScopes(t *testing.T) {
       tenants: [tenant-a]
       allowTenantless: true
       policyReader: true
+      metricsReader: true
 `)
 	cfg, err := Load(path)
 	if err != nil {
@@ -49,7 +50,7 @@ func TestLoadParsesAuthenticationPrincipalScopes(t *testing.T) {
 		t.Fatalf("auth = %#v", cfg.Auth)
 	}
 	principal := cfg.Auth.Principals[0]
-	if principal.ID != "gateway" || principal.TokenEnv != "TEST_GATEWAY_TOKEN" || len(principal.Tenants) != 1 || principal.Tenants[0] != "tenant-a" || !principal.AllowTenantless || !principal.PolicyReader {
+	if principal.ID != "gateway" || principal.TokenEnv != "TEST_GATEWAY_TOKEN" || len(principal.Tenants) != 1 || principal.Tenants[0] != "tenant-a" || !principal.AllowTenantless || !principal.PolicyReader || !principal.MetricsReader {
 		t.Fatalf("principal = %#v", principal)
 	}
 }

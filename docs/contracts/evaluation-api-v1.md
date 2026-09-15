@@ -26,6 +26,18 @@ Bearer authentication, `401`, and `403` are additive v1 contract capabilities.
 Enabling authentication is an operationally significant deployment change, so
 operators must distribute credentials before switching existing clients.
 
+## Trace propagation and metrics
+
+Evaluation clients may send a W3C `traceparent` header. ThinkPixelGR continues a
+valid version `00` context and returns the server span context in `traceparent`.
+An invalid value is ignored and replaced, not logged or echoed.
+
+`GET /metrics` is an additive, Prometheus-compatible operational endpoint. In
+authenticated deployments it requires the independent `metricsReader`
+capability. Metric labels exclude request, evaluation, principal, tenant,
+profile, and raw policy-expression values. Neither telemetry nor possession of
+the metrics capability changes evaluation or Run/tool authority.
+
 ## Finding attributes
 
 `Finding.attributes` is an optional object containing structured, non-content

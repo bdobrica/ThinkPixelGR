@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/thinkpixelgr/thinkpixelgr/internal/config"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/domain"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/engine"
+	"github.com/thinkpixelgr/thinkpixelgr/internal/observability"
 	"github.com/thinkpixelgr/thinkpixelgr/internal/policy"
 )
 
@@ -163,6 +165,76 @@ func TestPolicyEnumerationRequiresExplicitCapability(t *testing.T) {
 		if recorder.Code != want {
 			t.Errorf("policyReader=%t status = %d: %s", policyReader, recorder.Code, recorder.Body.String())
 		}
+	}
+}
+
+func TestMetricsRequireExplicitCapability(t *testing.T) {
+	for _, metricsReader := range []bool{false, true} {
+		handler, token := securedTestHandler(t, config.AuthPrincipal{
+			ID: "gateway", TokenEnv: "TEST_TOKEN", MetricsReader: metricsReader,
+		})
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		request.Header.Set("Authorization", "Bearer "+token)
+		handler.ServeHTTP(recorder, request)
+		want := http.StatusForbidden
+		if metricsReader {
+			want = http.StatusNotFound
+		}
+		if recorder.Code != want {
+			t.Errorf("metricsReader=%t status = %d: %s", metricsReader, recorder.Code, recorder.Body.String())
+		}
+	}
+}
+
+func TestObservabilityPropagatesTraceAndExcludesContentAndCredential(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	observer := observability.New(logger)
+	token := strings.Repeat("t", 32)
+	access, err := auth.NewStaticBearer(config.AuthConfig{Enabled: true, Principals: []config.AuthPrincipal{{
+		ID: "gateway", TokenEnv: "TEST_TOKEN", Tenants: []string{"demo"}, MetricsReader: true,
+	}}}, func(name string) (string, bool) { return token, name == "TEST_TOKEN" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver, err := policy.NewResolver(&config.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := New(engine.New(resolver, observer), resolver, access, observer)
+	content := "raw-content-MUST-NOT-APPEAR"
+	request := httptest.NewRequest(http.MethodPost, "/v1/evaluations", strings.NewReader(`{"request_id":"r1","stage":"pre_model","tenant_id":"demo","content":{"text":"`+content+`"}}`))
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if got := recorder.Header().Get("traceparent"); !strings.HasPrefix(got, "00-4bf92f3577b34da6a3ce929d0e0e4736-") {
+		t.Fatalf("traceparent = %q", got)
+	}
+
+	metricsRequest := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	metricsRequest.Header.Set("Authorization", "Bearer "+token)
+	metricsRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(metricsRecorder, metricsRequest)
+	if metricsRecorder.Code != http.StatusOK {
+		t.Fatalf("metrics status = %d: %s", metricsRecorder.Code, metricsRecorder.Body.String())
+	}
+	metrics := metricsRecorder.Body.String()
+	for _, expected := range []string{"thinkpixelgr_evaluations_total", "thinkpixelgr_evaluation_duration_seconds", "thinkpixelgr_http_requests_total"} {
+		if !strings.Contains(metrics, expected) {
+			t.Errorf("metrics missing %q", expected)
+		}
+	}
+	combined := logs.String() + metrics
+	if strings.Contains(combined, content) || strings.Contains(combined, token) {
+		t.Fatalf("observability output exposed content or credential: %s", combined)
+	}
+	if !strings.Contains(logs.String(), observability.AuditSchemaVersion) || !strings.Contains(logs.String(), `"event_kind":"trace"`) || !strings.Contains(logs.String(), `"span":"policy.resolve"`) {
+		t.Fatalf("structured audit or trace output missing: %s", logs.String())
 	}
 }
 

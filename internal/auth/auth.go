@@ -21,6 +21,7 @@ type Principal struct {
 	allTenants      bool
 	allowTenantless bool
 	policyReader    bool
+	metricsReader   bool
 }
 
 type principalContextKey struct{}
@@ -38,6 +39,7 @@ type Controller interface {
 	Authenticate(context.Context, string) (Principal, error)
 	AuthorizeTenant(context.Context, Principal, string) error
 	AuthorizePolicyList(context.Context, Principal) error
+	AuthorizeMetrics(context.Context, Principal) error
 }
 
 type StaticBearer struct {
@@ -83,7 +85,7 @@ func NewStaticBearer(cfg config.AuthConfig, lookupEnv func(string) (string, bool
 		}
 		principal := Principal{
 			ID: configured.ID, tenants: map[string]struct{}{},
-			allowTenantless: configured.AllowTenantless, policyReader: configured.PolicyReader,
+			allowTenantless: configured.AllowTenantless, policyReader: configured.PolicyReader, metricsReader: configured.MetricsReader,
 		}
 		for _, tenant := range configured.Tenants {
 			if tenant == "" || strings.TrimSpace(tenant) != tenant {
@@ -135,6 +137,13 @@ func (c *StaticBearer) AuthorizePolicyList(_ context.Context, principal Principa
 	return nil
 }
 
+func (c *StaticBearer) AuthorizeMetrics(_ context.Context, principal Principal) error {
+	if !principal.metricsReader {
+		return ErrForbidden
+	}
+	return nil
+}
+
 func parseBearer(authorization string) (string, bool) {
 	parts := strings.Fields(authorization)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || parts[1] == "" {
@@ -146,8 +155,9 @@ func parseBearer(authorization string) (string, bool) {
 type Disabled struct{}
 
 func (Disabled) Authenticate(context.Context, string) (Principal, error) {
-	return Principal{ID: "authentication-disabled", allTenants: true, allowTenantless: true, policyReader: true}, nil
+	return Principal{ID: "authentication-disabled", allTenants: true, allowTenantless: true, policyReader: true, metricsReader: true}, nil
 }
 
 func (Disabled) AuthorizeTenant(context.Context, Principal, string) error { return nil }
 func (Disabled) AuthorizePolicyList(context.Context, Principal) error     { return nil }
+func (Disabled) AuthorizeMetrics(context.Context, Principal) error        { return nil }

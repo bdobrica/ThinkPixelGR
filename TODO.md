@@ -26,7 +26,7 @@ material belong under [`docs/`](docs/README.md).
   fail-closed, and monitor-on-failure behavior in the public contract.
 - [x] Add authentication and tenant authorization without treating a guardrail
   decision as Run or tool authority.
-- [ ] Add structured audit events, metrics, and tracing that exclude raw content
+- [x] Add structured audit events, metrics, and tracing that exclude raw content
   and secrets by default.
 - [ ] Add contract validation and integration tests to `make verify` when their
   implementations land.

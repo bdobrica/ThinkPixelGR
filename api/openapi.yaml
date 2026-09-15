@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: ThinkPixelGR API
-  version: 0.2.0
+  version: 0.3.0
   description: Policy-driven evaluation for LLM-adjacent content.
 servers:
   - url: http://localhost:8080
@@ -24,9 +24,13 @@ paths:
   /v1/policies:
     get:
       operationId: listPolicies
+      parameters:
+        - { $ref: "#/components/parameters/Traceparent" }
       responses:
         "200":
           description: Loaded canonical policy identifiers.
+          headers:
+            traceparent: { $ref: "#/components/headers/Traceparent" }
           content:
             application/json:
               schema:
@@ -39,6 +43,8 @@ paths:
   /v1/evaluations:
     post:
       operationId: evaluate
+      parameters:
+        - { $ref: "#/components/parameters/Traceparent" }
       requestBody:
         required: true
         content:
@@ -47,21 +53,58 @@ paths:
       responses:
         "200":
           description: A policy decision. Blocks are successful evaluations.
+          headers:
+            traceparent: { $ref: "#/components/headers/Traceparent" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/EvaluationResponse" }
         "400":
           description: Invalid request or unknown policy/profile.
+          headers:
+            traceparent: { $ref: "#/components/headers/Traceparent" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "504":
           description: The caller or overall evaluation context expired; no policy failure mode was applied.
+          headers:
+            traceparent: { $ref: "#/components/headers/Traceparent" }
+  /metrics:
+    get:
+      operationId: metrics
+      description: Prometheus metrics with bounded, content-free labels. Protected deployments require the metricsReader capability.
+      parameters:
+        - { $ref: "#/components/parameters/Traceparent" }
+      responses:
+        "200":
+          description: Prometheus text exposition.
+          headers:
+            traceparent: { $ref: "#/components/headers/Traceparent" }
+          content:
+            text/plain:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 components:
   securitySchemes:
     BearerAuth:
       type: http
       scheme: bearer
       description: A deployment-issued credential mapped server-side to tenant and API capabilities.
+  parameters:
+    Traceparent:
+      name: traceparent
+      in: header
+      required: false
+      description: W3C trace context. Invalid values are ignored and replaced with a new trace.
+      schema:
+        type: string
+        pattern: '^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'
+  headers:
+    Traceparent:
+      description: W3C trace context for the server request span.
+      schema:
+        type: string
+        pattern: '^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'
   responses:
     Health:
       description: Healthy.
@@ -75,11 +118,14 @@ components:
       headers:
         WWW-Authenticate:
           schema: { type: string, const: Bearer }
+        traceparent: { $ref: "#/components/headers/Traceparent" }
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     Forbidden:
       description: The authenticated principal lacks the requested tenant or API capability.
+      headers:
+        traceparent: { $ref: "#/components/headers/Traceparent" }
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

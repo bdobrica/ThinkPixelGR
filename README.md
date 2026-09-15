@@ -17,8 +17,10 @@ structured secret detection. It supports `allow`, `block`, `redact`, and `monito
 The versioned remote-detector wire contract and conformance tests are published;
 policy and detector deadlines now enforce explicit fail-open, fail-closed, or
 monitor-on-failure behavior. Bearer-authenticated callers are bound to explicit
-tenant and API scopes. Remote adapters, live configuration reload,
-observability, and production deployment remain planned work.
+tenant and API scopes. Content-safe JSON audit events, Prometheus metrics, and
+W3C-correlated trace spans are available through a replaceable observability
+port. Remote adapters, live configuration reload, and production deployment
+remain planned work.
 
 See the [documentation index](docs/README.md), [implementation ledger](TODO.md),
 and [implementation plan](PLAN.md) for authoritative detail.
@@ -68,6 +70,8 @@ containerized service with `docker compose up --build`.
 - The Go service owns orchestration and deterministic checks. Specialized
   detector runtimes remain replaceable external services.
 - ThinkPixelGR does not persist raw evaluated content in the current slice.
+- Audit, metric, and trace output excludes raw content and credentials by
+  default; metrics require an independent authenticated capability.
 
 The canonical API is [`api/openapi.yaml`](api/openapi.yaml), example policy
 configuration is [`configs/config.yaml`](configs/config.yaml), and repository

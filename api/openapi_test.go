@@ -66,11 +66,27 @@ func TestOpenAPIDocumentsDeploymentSelectedBearerAuthentication(t *testing.T) {
 			t.Fatalf("%s security = %#v", path, operation["security"])
 		}
 	}
-	for _, endpoint := range []struct{ path, method string }{{"/v1/evaluations", "post"}, {"/v1/policies", "get"}} {
+	for _, endpoint := range []struct{ path, method string }{{"/v1/evaluations", "post"}, {"/v1/policies", "get"}, {"/metrics", "get"}} {
 		responses, ok := nestedMap(document, "paths", endpoint.path, endpoint.method, "responses")
 		if !ok || responses["401"] == nil || responses["403"] == nil {
 			t.Fatalf("%s auth responses = %#v", endpoint.path, responses)
 		}
+	}
+}
+
+func TestOpenAPIDocumentsMetricsAndTracePropagation(t *testing.T) {
+	document := readDocument(t)
+	metrics, ok := nestedMap(document, "paths", "/metrics", "get", "responses", "200", "content", "text/plain", "schema")
+	if !ok || metrics["type"] != "string" {
+		t.Fatalf("metrics schema = %#v", metrics)
+	}
+	traceparent, ok := nestedMap(document, "components", "parameters", "Traceparent")
+	if !ok || traceparent["in"] != "header" || traceparent["name"] != "traceparent" {
+		t.Fatalf("traceparent parameter = %#v", traceparent)
+	}
+	evaluation, ok := nestedMap(document, "paths", "/v1/evaluations", "post")
+	if !ok || evaluation["parameters"] == nil {
+		t.Fatalf("evaluation trace parameters = %#v", evaluation["parameters"])
 	}
 }
 
