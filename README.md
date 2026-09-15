@@ -79,8 +79,10 @@ ownership boundaries are defined in [`ALIGNMENT.md`](ALIGNMENT.md).
 
 ## Contributing
 
-Use `make verify` as the aggregate local verification gate. Please keep public
-API changes synchronized with the OpenAPI contract, compatibility notes,
+Use `make verify` as the aggregate local verification gate. It includes unit,
+contract, and integration targets described in the
+[verification guide](docs/operations/verification.md). Please keep public API
+changes synchronized with the OpenAPI contract, compatibility notes,
 documentation, and tests. Follow [`AGENTS.md`](AGENTS.md) for repository rules.
 
 ## ThinkPixel platform

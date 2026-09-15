@@ -64,13 +64,18 @@
         "version": {"type": "string", "minLength": 1},
         "revision": {"type": "string", "minLength": 1},
         "model": {
-          "type": ["object", "null"],
-          "required": ["name", "revision"],
-          "properties": {
-            "name": {"type": "string", "minLength": 1},
-            "revision": {"type": "string", "minLength": 1}
-          },
-          "additionalProperties": false
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["name", "revision"],
+              "properties": {
+                "name": {"type": "string", "minLength": 1},
+                "revision": {"type": "string", "minLength": 1}
+              },
+              "additionalProperties": false
+            },
+            {"enum": [null]}
+          ]
         }
       },
       "additionalProperties": false
@@ -160,7 +165,7 @@
       "type": "object",
       "required": ["protocol_version", "detector", "preprocessing_revision", "supported_stages", "supported_content_types", "supported_languages", "limits", "taxonomy", "capabilities", "recommended_thresholds"],
       "properties": {
-        "protocol_version": {"const": "1.0"},
+        "protocol_version": {"enum": ["1.0"]},
         "detector": {"$ref": "#/$defs/DetectorIdentity"},
         "preprocessing_revision": {"type": "string", "minLength": 1},
         "supported_stages": {
@@ -214,7 +219,7 @@
           "if": {
             "properties": {
               "capabilities": {
-                "properties": {"batch": {"const": false}},
+                "properties": {"batch": {"enum": [false]}},
                 "required": ["batch"]
               }
             }
@@ -222,7 +227,7 @@
           "then": {
             "properties": {
               "limits": {
-                "properties": {"max_batch_size": {"const": 0}}
+                "properties": {"max_batch_size": {"enum": [0]}}
               }
             }
           }
@@ -231,7 +236,7 @@
           "if": {
             "properties": {
               "capabilities": {
-                "properties": {"batch": {"const": true}},
+                "properties": {"batch": {"enum": [true]}},
                 "required": ["batch"]
               }
             }

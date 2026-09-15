@@ -38,6 +38,15 @@ capability. Metric labels exclude request, evaluation, principal, tenant,
 profile, and raw policy-expression values. Neither telemetry nor possession of
 the metrics capability changes evaluation or Run/tool authority.
 
+## Contract validation
+
+The OpenAPI document is parsed, reference-resolved, and semantically validated
+by `make contract-test`. Live integration responses are also checked against
+their declared response schemas by `make integration-test`. Singleton `enum`
+forms are used where they are semantically equivalent to JSON Schema `const` so
+the OpenAPI 3.1 contract remains compatible with the repository validator; this
+does not change any accepted wire value.
+
 ## Finding attributes
 
 `Finding.attributes` is an optional object containing structured, non-content

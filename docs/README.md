@@ -22,6 +22,7 @@ authorization of Runs, tools, models, Workspaces, and memory.
 - [Remote detector protocol v1](contracts/remote-detector-v1.md)
 - [Authentication and tenant authorization](security/authentication.md)
 - [Observability operations](operations/observability.md)
+- [Verification gates](operations/verification.md)
 - [Repository alignment](../ALIGNMENT.md)
 - [Implementation plan](../PLAN.md)
 - [Implementation ledger](../TODO.md)

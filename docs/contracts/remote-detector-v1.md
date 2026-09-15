@@ -1,5 +1,11 @@
 # Remote detector protocol v1
 
+The OpenAPI and draft 2020-12 JSON Schema documents are compiled and validated
+by `make contract-test`, including every published example. The schema uses
+singleton `enum` and `oneOf` expressions in place of equivalent `const` and
+multi-type expressions where needed for OpenAPI validator interoperability;
+accepted and rejected wire values are unchanged.
+
 The normative artifacts are the [OpenAPI document](../../api/detector/v1/openapi.yaml)
 and [JSON Schema bundle](../../api/detector/v1/schema.json). Published examples
 and the executable schema conformance suite live beside them under

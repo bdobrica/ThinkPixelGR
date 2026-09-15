@@ -112,12 +112,12 @@ components:
         application/json:
           schema:
             type: object
-            properties: { status: { type: string, const: ok } }
+            properties: { status: { type: string, enum: [ok] } }
     Unauthorized:
       description: Bearer authentication is missing or invalid.
       headers:
         WWW-Authenticate:
-          schema: { type: string, const: Bearer }
+          schema: { type: string, enum: [Bearer] }
         traceparent: { $ref: "#/components/headers/Traceparent" }
       content:
         application/json:

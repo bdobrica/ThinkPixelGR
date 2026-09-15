@@ -2,15 +2,45 @@ package detectorv1
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"gopkg.in/yaml.v3"
 )
+
+func TestOpenAPIContractIsValid(t *testing.T) {
+	loader := openapi3.NewLoader()
+	loader.IsExternalRefsAllowed = true
+	document, err := loader.LoadFromFile("openapi.yaml")
+	if err != nil {
+		t.Fatalf("load OpenAPI: %v", err)
+	}
+	// Conditional JSON Schema keywords are validated by the draft 2020-12
+	// compiler below; kin-openapi treats them as schema-reference siblings.
+	if err := document.Validate(context.Background(), openapi3.AllowExtraSiblingFields("if", "then")); err != nil {
+		t.Fatalf("validate OpenAPI: %v", err)
+	}
+}
+
+func TestJSONSchemaContractCompiles(t *testing.T) {
+	raw, err := os.ReadFile("schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("schema.json", bytes.NewReader(raw)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := compiler.Compile("schema.json"); err != nil {
+		t.Fatalf("compile detector schema bundle: %v", err)
+	}
+}
 
 func TestPublishedExamplesConformToSchemas(t *testing.T) {
 	tests := []struct {
